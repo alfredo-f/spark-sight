@@ -331,7 +331,7 @@ def main_cli():
     )
     
     parser = argparse.ArgumentParser(
-        description="Process some integers."
+        description="Spark performance at a glance."
     )
     parser.add_argument(
         "--path",

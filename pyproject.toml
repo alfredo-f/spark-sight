@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "spark-sight"
-version = "0.1.0"
+version = "0.1.1"
 description = "Spark performance at a glance"
 authors = ["Alfredo Fomitchenko <alfredo.fomitchenko@mail.polimi.it>"]
 

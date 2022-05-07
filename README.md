@@ -62,7 +62,7 @@ spark-sight --help
 
 usage: spark-sight [-h] [--path path] [--cpus cpus] [--deploy_mode [deploy_mode]]
 
-Process some integers. 
+Spark performance at a glance.
 
 optional arguments:
   -h, --help            show this help message and exit
