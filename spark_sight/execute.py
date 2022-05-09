@@ -186,7 +186,7 @@ def _main(
 
     task_grouped.loc[:, COL_SUBSTAGE_DURATION] = (
         task_grouped[COL_SUBSTAGE_DURATION]
-        / Decimal(1e9)
+        / float(1e9)
     )
     
     task_grouped = task_grouped[

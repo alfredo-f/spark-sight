@@ -182,28 +182,28 @@ def convert_line_to_metrics(
                     # in the Spark UI. The green bar indicates the duration
                     # of the task being scheduled onto the executor,
                     # not the actual execution on the CPU
-                    Decimal(task["Task Metrics"]["Executor CPU Time"]),
+                    float(task["Task Metrics"]["Executor CPU Time"]),
                 "overhead": {
                     "serde":
-                        Decimal(
+                        float(
                             task["Task Metrics"][
                                 "Executor Deserialize CPU Time"]
                             # / 1e9
                         )
                         + (
-                            Decimal(task["Task Metrics"][
+                            float(task["Task Metrics"][
                                 "Result Serialization Time"]
-                            ) * Decimal(1e6)
+                            ) * float(1e6)
                         ),
                     "shuffle": (
                         # "read":
-                        Decimal(
+                        float(
                             task["Task Metrics"]["Shuffle Read Metrics"][
                                 "Fetch Wait Time"]
                             # / 1e3
                         )
                         # "write":
-                        + Decimal(
+                        + float(
                             task["Task Metrics"]["Shuffle Write Metrics"][
                                 "Shuffle Write Time"]
                             # / 1e3

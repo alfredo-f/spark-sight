@@ -191,10 +191,10 @@ def test_convert_line_to_metrics():
         },
         'duration': {
             'cpu': {
-                'usage': Decimal('5981292588'),
+                'usage': float('5981292588'),
                 'overhead': {
-                    'serde': Decimal('44113527'),
-                    'shuffle': Decimal('259617517')
+                    'serde': float('44113527'),
+                    'shuffle': float('259617517')
                 }
             }
         }

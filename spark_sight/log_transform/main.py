@@ -256,7 +256,7 @@ def split_on_borders(
             
             # Discard split resulting in all metrics < threshold
             if any(
-                to_split_row_left[_metric] > Decimal(threshold_metrics_discard)
+                to_split_row_left[_metric] > float(threshold_metrics_discard)
                 for _metric in metrics
             ):
                 line_just_split_rows_split.append(to_split_row_left)
@@ -266,7 +266,7 @@ def split_on_borders(
                 )
                 
             if any(
-                to_split_row_right[_metric] > Decimal(threshold_metrics_discard)
+                to_split_row_right[_metric] > float(threshold_metrics_discard)
                 for _metric in metrics
             ):
                 line_just_split_rows_split.append(to_split_row_right)
@@ -375,16 +375,16 @@ def split_single_border(
         _left[metric] = (
             metric_total
             * (
-                Decimal(duration_left.delta)
-                / Decimal(duration_total_left.delta)
+                float(duration_left.delta)
+                / float(duration_total_left.delta)
             )
         )
 
         _right[metric] = (
             metric_total
             * (
-                Decimal(duration_right.delta)
-                / Decimal(duration_total_right.delta)
+                float(duration_right.delta)
+                / float(duration_total_right.delta)
             )
         )
         
