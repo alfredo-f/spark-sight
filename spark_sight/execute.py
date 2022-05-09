@@ -114,36 +114,70 @@ def _main(
     cpus: int,
     deploy_mode: str = DEPLOY_MODE_CLUSTER,
 ):
-    _file = open(
+    lines_tasks = []
+    lines_stages = []
+
+    logging.info("Parsing Spark event log...")
+    
+    try:
+        _file = open(
+            path_spark_event_log,
+            "r",
+        )
+        _file_lines = sum(1.0 for _ in _file)
+    finally:
+        _file.close()
+    
+    _perc_log_dict = [0.25, 0.5, 0.75]
+    _perc_log_index = 0
+    
+    with open(
         path_spark_event_log,
         "r",
-    )
-    
-    lines = []
-    for _ in _file.readlines():
-        try:
-            lines.append(
-                json.loads(_)
-            )
-        except JSONDecodeError as e:
-            logging.debug(f"Unterminated line : {_}")
-    
-    if len(lines) == 0:
-        logging.critical(
-            compose_str_exception_file_invalid_content(path_spark_event_log)
-        )
+    ) as _file:
         
+        for _line_index, _line in enumerate(_file):
+            try:
+                _line = json.loads(_line)
+            
+                if _line["Event"] == "SparkListenerStageCompleted":
+                    lines_stages.append(_line)
+                elif _line["Event"] == "SparkListenerTaskEnd":
+                    lines_tasks.append(_line)
+            except JSONDecodeError as e:
+                logging.debug(f"Invalid line : {_line}")
+            
+            _perc = float(_line_index) / _file_lines
+            if (
+                _perc_log_index in range(len(_perc_log_dict))
+                and _perc > _perc_log_dict[_perc_log_index]
+            ):
+                logging.info(
+                    "Parsing Spark event log: "
+                    f"{_perc * 100:.0f}%"
+                )
+                _perc_log_index += 1
+
+    logging.info("Parsing Spark event log: done")
+    
+    if len(lines_tasks) == 0 or len(lines_stages) == 0:
+        logging.critical(
+            compose_str_exception_file_invalid_content(
+                path_spark_event_log
+            )
+        )
+    
         return
     
     try:
         stage_ids = set(
             _["Stage Info"]["Stage ID"]
-            for _ in lines
+            for _ in lines_stages
             if _["Event"] == "SparkListenerStageCompleted"
         )
         
         task_info = extract_task_info(
-            lines=lines,
+            lines_tasks=lines_tasks,
             stage_ids=stage_ids,
         )
         
@@ -220,7 +254,7 @@ def _main(
     
     _df_stage = (
         create_duration_stage(
-            lines,
+            lines_stages,
             stage_ids,
         )
         .rename(

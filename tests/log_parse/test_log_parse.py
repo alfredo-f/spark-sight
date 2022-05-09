@@ -124,7 +124,7 @@ def test_extract_event_stage():
 def test_extract_task_info():
     
     result = extract_task_info(
-        lines=[
+        lines_tasks=[
             json.loads(_)
             for _ in open(
                  Path(ROOT_TESTS_LOG_PARSE)

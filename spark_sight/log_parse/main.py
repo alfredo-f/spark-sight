@@ -11,14 +11,14 @@ from spark_sight.data_references import (
 
 
 def extract_task_info(
-    lines: List[dict],
+    lines_tasks: List[dict],
     stage_ids: Iterable[int],
 ) -> pd.DataFrame:
     """Extract task information from Spark log lines.
     
     Parameters
     ----------
-    lines : list of dict
+    lines_tasks : list of dict
         Lines of the Spark log.
     stage_ids : iterable of int
         Stage ids to filter for.
@@ -45,7 +45,7 @@ def extract_task_info(
     for stage_id in stage_ids:
         logging.debug(f"Stage {stage_id}")
         
-        tasks = extract_events_tasks(lines, stage_id=stage_id)
+        tasks = extract_events_tasks(lines_tasks, stage_id=stage_id)
         
         for task in tasks:
             _task_info_dict = convert_line_to_metrics(task)

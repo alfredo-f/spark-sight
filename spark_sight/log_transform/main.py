@@ -475,13 +475,13 @@ def determine_borders_of_stages_asoftasks(
 
 
 def create_duration_stage(
-    lines,
+    lines_stages,
     stage_ids,
 ):
     data_stage_single = []
     
     for stage_id in stage_ids:
-        stage = extract_event_stage(lines, stage_id=stage_id)
+        stage = extract_event_stage(lines_stages, stage_id=stage_id)
         
         stage_duration = (
             (
