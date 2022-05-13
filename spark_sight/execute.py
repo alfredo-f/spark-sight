@@ -75,6 +75,7 @@ def determine_cpus_available(
     cpus: int,
     deploy_mode: str,
 ) -> int:
+    # TODO https://stackoverflow.com/questions/24909958/spark-on-yarn-concept-understanding/38598830#38598830
     if deploy_mode not in (
         DEPLOY_MODE_CLUSTER,
         DEPLOY_MODE_CLIENT,
@@ -170,6 +171,7 @@ def _main(
         return
     
     try:
+        # TODO extract stages from tasks, because of incomplete stages
         stage_ids = set(
             _["Stage Info"]["Stage ID"]
             for _ in lines_stages

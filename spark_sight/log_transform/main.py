@@ -481,6 +481,7 @@ def create_duration_stage(
     data_stage_single = []
     
     for stage_id in stage_ids:
+        # TODO handle incomplete stages
         stage = extract_event_stage(lines_stages, stage_id=stage_id)
         
         stage_duration = (
@@ -491,8 +492,6 @@ def create_duration_stage(
             / 1e3
         )
         
-        # TODOish Launch time of any task related to the stage
-        # can be very far from stage submission time
         start_date = pd.to_datetime(
             stage["Stage Info"]["Submission Time"] * 1e6
         )
