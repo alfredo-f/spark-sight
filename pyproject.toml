@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "spark-sight"
 # TODO update __version__
-version = "0.1.4"
+version = "0.1.5"
 description = "Spark performance at a glance"
 authors = ["Alfredo Fomitchenko <alfredo.fomitchenko@mail.polimi.it>"]
 

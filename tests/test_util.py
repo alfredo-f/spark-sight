@@ -29,11 +29,6 @@ def test_is_latest_version(
     codes_mock = Mock()
     codes_mock.ok = 200
 
-    toml_loads_mock = Mock()
-    toml_loads_mock.return_value = {
-        "tool": {"poetry": {"version": _version}}
-    }
-    
     mocker.patch(
         "spark_sight.util.get",
         get_mock,
@@ -41,10 +36,6 @@ def test_is_latest_version(
     mocker.patch(
         "spark_sight.util.codes",
         codes_mock,
-    )
-    mocker.patch(
-        "spark_sight.util.toml_loads",
-        toml_loads_mock,
     )
     
     assert is_latest_version() == _is_it

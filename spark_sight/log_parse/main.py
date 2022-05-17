@@ -1,6 +1,6 @@
 import logging
 from decimal import Decimal
-from typing import List, Iterable
+from typing import List, Iterable, Set, Union
 
 import pandas as pd
 
@@ -12,7 +12,7 @@ from spark_sight.data_references import (
 
 def extract_task_info(
     lines_tasks: List[dict],
-    stage_ids: Iterable[int],
+    stage_ids: Union[List[int], Set[int]],
 ) -> pd.DataFrame:
     """Extract task information from Spark log lines.
     
@@ -38,11 +38,16 @@ def extract_task_info(
         * duration_cpu_overhead_shuffle: duration of overhead shuffle (reading and writing). Measured in ns
 
     """
-    logging.info("Extracting task information from Spark event log...")
-    
+    _log_root = "Extracting task information from Spark event log"
+    logging.info(f"{_log_root}...")
+
+    _perc_log_dict = [0.25, 0.5, 0.75]
+    _perc_log_index = 0
+    _perc_log_len = len(stage_ids)
+
     df = None
     
-    for stage_id in stage_ids:
+    for stage_id_index, stage_id in enumerate(stage_ids):
         logging.debug(f"Stage {stage_id}")
         
         tasks = extract_events_tasks(lines_tasks, stage_id=stage_id)
@@ -72,8 +77,19 @@ def extract_task_info(
                     ],
                     ignore_index=True,
                 )
-
-    logging.info("Extracting task information from Spark event log: done\n")
+        
+        _perc = float(stage_id_index) / _perc_log_len
+        if (
+            _perc_log_index in range(len(_perc_log_dict))
+            and _perc > _perc_log_dict[_perc_log_index]
+        ):
+            logging.info(
+                f"{_log_root}: "
+                f"{_perc_log_dict[_perc_log_index] * 100:.0f}%"
+            )
+            _perc_log_index += 1
+        
+    logging.info(f"{_log_root}: done\n")
     
     return df
 

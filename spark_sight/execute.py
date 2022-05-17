@@ -155,11 +155,11 @@ def _main(
             ):
                 logging.info(
                     "Parsing Spark event log: "
-                    f"{_perc * 100:.0f}%"
+                    f"{_perc_log_dict[_perc_log_index] * 100:.0f}%"
                 )
                 _perc_log_index += 1
 
-    logging.info("Parsing Spark event log: done")
+    logging.info("Parsing Spark event log: done\n")
     
     if len(lines_tasks) == 0 or len(lines_stages) == 0:
         logging.critical(
