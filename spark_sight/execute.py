@@ -365,11 +365,11 @@ def main_cli():
 """
     )
     
-    if not is_latest_version():
-        logging.info(
-            "(OMG new version available: pip install --upgrade spark-sight)"
-            "\n"
-        )
+    # if not is_latest_version():
+    #     logging.info(
+    #         "(OMG new version available: pip install --upgrade spark-sight)"
+    #         "\n"
+    #     )
     
     parser = argparse.ArgumentParser(
         description="Spark performance at a glance."
