@@ -32,6 +32,7 @@ from spark_sight.log_transform.main import \
     aggregate_tasks_in_substages,
     create_duration_stage,
 )
+from spark_sight.util import is_latest_version
 
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -363,6 +364,12 @@ def main_cli():
     |_|                               |___/
 """
     )
+    
+    if not is_latest_version():
+        logging.info(
+            "(OMG new version available: pip install --upgrade spark-sight)"
+            "\n"
+        )
     
     parser = argparse.ArgumentParser(
         description="Spark performance at a glance."
