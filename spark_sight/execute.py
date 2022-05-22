@@ -32,7 +32,7 @@ from spark_sight.log_transform.main import \
     aggregate_tasks_in_substages,
     create_duration_stage,
 )
-from spark_sight.util import is_latest_version
+from spark_sight.util import is_latest_version, configure_pandas
 
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -171,15 +171,20 @@ def _main(
         return
     
     try:
-        stage_ids = set(
+        stage_ids_completed = set(
             _["Stage Info"]["Stage ID"]
             for _ in lines_stages
             if _["Event"] == "SparkListenerStageCompleted"
         )
         
+        stage_ids_all = set(
+            _["Stage ID"]
+            for _ in lines_tasks
+        )
+        
         task_info = extract_task_info(
             lines_tasks=lines_tasks,
-            stage_ids=stage_ids,
+            stage_ids=stage_ids_all,
         )
         
     except Exception:
@@ -256,7 +261,7 @@ def _main(
     _df_stage = (
         create_duration_stage(
             lines_stages,
-            stage_ids,
+            stage_ids_completed,
         )
         .rename(
             columns={

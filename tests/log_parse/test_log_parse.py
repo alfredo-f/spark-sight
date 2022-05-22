@@ -1,8 +1,10 @@
 import json
 from decimal import Decimal
 from pathlib import Path
+from typing import List
 
 import pandas as pd
+import pytest
 from pandas import Timestamp
 
 from spark_sight.log_parse.main import (
@@ -121,7 +123,23 @@ def test_extract_event_stage():
     }
     
 
-def test_extract_task_info():
+@pytest.mark.parametrize(
+    "stage_ids,expected_file_name",
+    [
+        (
+            [0, 1],
+            "extract_task_info__completed__expected.csv",
+        ),
+        (
+            [0, 1, 2],
+            "extract_task_info__incomplete__expected.csv",
+        ),
+    ]
+)
+def test_extract_task_info_completed(
+    stage_ids: List[int],
+    expected_file_name: str,
+):
     
     result = extract_task_info(
         lines_tasks=[
@@ -131,14 +149,14 @@ def test_extract_task_info():
                 / Path("spark_event_log__input.csv")
             ).readlines()
         ],
-        stage_ids=[0, 1],
+        stage_ids=stage_ids,
     )
 
     assert_frame_equal_wo_order(
         result,
         pd.read_csv(
             Path(ROOT_TESTS_LOG_PARSE)
-            / Path("extract_task_info__expected.csv")
+            / Path(expected_file_name)
         ),
         cols_to_str="all",
     )

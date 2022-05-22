@@ -13,7 +13,7 @@ from spark_sight.util import is_latest_version
         ("0.1.4", False),
     ],
 )
-def test_is_latest_version(
+def no_test_is_latest_version(
     mocker: MockerFixture,
     _version: str,
     _is_it: bool,

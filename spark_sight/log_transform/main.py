@@ -107,7 +107,6 @@ def aggregate_tasks_in_substages(
         df
         .groupby(
             COL_SUBSTAGE_DATE_INTERVAL,
-            as_index=False,
         )
         .agg(
             {
@@ -118,6 +117,7 @@ def aggregate_tasks_in_substages(
                 },
             }
         )
+        .reset_index()
     )
     
     grouped = (
