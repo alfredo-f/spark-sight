@@ -1,5 +1,3 @@
-import logging
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -10,6 +8,7 @@ from spark_sight.data_references import (
     COL_SUBSTAGE_DURATION,
     COL_SUBSTAGE_DATE_START,
     COL_SUBSTAGE_DATE_END,
+    COL_ID_EXECUTOR,
 )
 
 
@@ -23,8 +22,6 @@ def create_chart_efficiency(
     fig: Figure,
     cpus_available: int,
 ):
-    logging.info("Creating chart efficiency...")
-    
     id_vars = [
         COL_SUBSTAGE_DATE_START,
         COL_SUBSTAGE_DATE_END,
@@ -125,8 +122,6 @@ def create_chart_efficiency(
         col=1,
     )
 
-    logging.info("Creating chart efficiency: done\n")
-
 
 def assign_y_to_stages(
     _df_stages: pd.DataFrame,
@@ -215,82 +210,311 @@ def assign_y_to_stages(
     return y
 
 
-def create_chart_timeline_stages(
-    _df_stage,
-    fig,
-):
-    logging.info("Creating chart timeline of stages...")
+def format_bytes(
+    size: float,
+) -> str:
+    format_float_decimals = 1
     
-    stages_y = assign_y_to_stages(_df_stage)
-    _df_stage.loc[:, "y"] = _df_stage[COL_ID_STAGE].astype(str).replace(stages_y)
-    _df_stage.loc[:, "y_labels"] = _df_stage[COL_ID_STAGE]
+    power = 2**10
+    n = 0
+    
+    power_labels = {
+        0: '',
+        1: 'K',
+        2: 'M',
+        3: 'G',
+        4: 'T',
+    }
+    
+    while size > power:
+        size /= power
+        n += 1
+    
+    n = min(
+        n,
+        len(power_labels) - 1,
+    )
+    
+    return (
+        (
+            (
+                r"{:." + str(format_float_decimals) + r"f}"
+            )
+            .format(size)
+        )
+        + " "
+        + power_labels[n] + 'B'
+    )
+
+
+def _create_trace_spill(
+    df: pd.DataFrame,
+    col_y: str,
+    px_timeline_color_kwargs: dict = None,
+    opacity: float = 1,
+    is_trace_hidden: bool = False,
+):
+    df = df.reset_index(drop=True)
     
     # Plotly can"t handle ns
     # plotly.express._core == 5.7.0, line 1681
     # args["data_frame"][args["x_end"]] = (x_end - x_start).astype("timedelta64[ms]")
-    _df_stage.loc[:, COL_SUBSTAGE_DATE_START] = (
-        _df_stage[COL_SUBSTAGE_DATE_START].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
-    )
-
-    _df_stage.loc[:, COL_SUBSTAGE_DATE_END] = (
-        _df_stage[COL_SUBSTAGE_DATE_END].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+    df.loc[:, COL_SUBSTAGE_DATE_START] = (
+        df[COL_SUBSTAGE_DATE_START].dt.strftime(
+            GANTT_XAXIS_DATETIME_FORMAT
+        )
     )
     
-    timeline_stages_fig = px.timeline(
-        data_frame=_df_stage,
+    df.loc[:, COL_SUBSTAGE_DATE_END] = (
+        df[COL_SUBSTAGE_DATE_END].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+    )
+    
+    if not is_trace_hidden:
+        text_col = "memory_spill_disk_format"
+        
+        df.loc[:, "memory_spill_disk_format"] = (
+            df["memory_spill_disk"].apply(format_bytes)
+        )
+        
+    else:
+        text_col = "y_labels"
+    
+    _fig = px.timeline(
+        data_frame=df,
         x_start=COL_SUBSTAGE_DATE_START,
         x_end=COL_SUBSTAGE_DATE_END,
-        y="y",
-        text="y_labels",
+        y=col_y,
+        text=text_col,
+        **px_timeline_color_kwargs,
     )
     
-    _len = len(_df_stage)
-    _start = pd.to_datetime(_df_stage[COL_SUBSTAGE_DATE_START], format=GANTT_XAXIS_DATETIME_FORMAT)
-    _end = pd.to_datetime(_df_stage[COL_SUBSTAGE_DATE_END], format=GANTT_XAXIS_DATETIME_FORMAT)
+    _len = len(df)
+    _start = pd.to_datetime(
+        df[COL_SUBSTAGE_DATE_START],
+        format=GANTT_XAXIS_DATETIME_FORMAT
+    )
+    _end = pd.to_datetime(
+        df[COL_SUBSTAGE_DATE_END],
+        format=GANTT_XAXIS_DATETIME_FORMAT
+    )
     _duration = (_end - _start).astype("timedelta64[s]")
     
-    _hovertext = (
-        pd.Series(["Stage: <b>"] * _len)
-        + _df_stage["y_labels"].map("{:.0f}".format)
-        + pd.Series(["</b>"] * _len)
-        + pd.Series(["<br>"] * _len)
-        + _start.dt.strftime("%H:%M:%S")
-        + pd.Series([" to "] * _len)
-        + _end.dt.strftime("%H:%M:%S")
-        + pd.Series([" ("] * _len)
-        + _duration.map("{:.0f}".format)
-        + pd.Series([" sec)"] * _len)
-    )
-
-    timeline_stages_fig.update_traces(
-        hovertext=_hovertext,
-        hovertemplate=(
-            "%{hovertext}"
-            "<extra></extra>"
-        ),
+    _fig.update_traces(
+        opacity=opacity,
         marker_line=dict(
             width=1,
             color="white",
         ),
-        marker_color="black",
         textposition="inside",
         textangle=0,
         insidetextanchor="middle",
     )
+    
+    if not is_trace_hidden:
+        
+        _hovertext_date_range = (
+            _start.dt.strftime("%H:%M:%S")
+            + pd.Series([" to "] * _len)
+            + _end.dt.strftime("%H:%M:%S")
+            + pd.Series([" ("] * _len)
+            + _duration.map("{:.0f}".format)
+            + pd.Series([" sec)"] * _len)
+        )
+        
+        _hovertext_stage_all = (
+            df[COL_ID_STAGE].map(len).map(
+                lambda _: "Stage" + ("s" if _ > 1 else "") + ": <b>"
+            )
+            + pd.Series(
+            [", ".join([str(__) for __ in _]) for _ in
+                df[COL_ID_STAGE].values]
+        )
+            + pd.Series(["</b>"] * _len)
+        )
+        
+        _hovertext = (
+            _hovertext_date_range
+            + pd.Series(["<br>"] * _len)
+            + pd.Series(["Executor ID: <b>"] * _len)
+            + df[COL_ID_EXECUTOR].astype(int).astype(str)
+            + pd.Series(["</b>"] * _len)
+            + pd.Series(["<br>"] * _len)
+            + pd.Series(["Total spilled: <b>"] * _len)
+            + df["memory_spill_disk_format"]
+            + pd.Series(["</b>"] * _len)
+            + pd.Series(["<br>"] * _len)
+            + _hovertext_stage_all
+        )
+    
+        _fig.update_traces(
+            hovertext=_hovertext,
+            hovertemplate=(
+                "%{hovertext}"
+                "<extra></extra>"
+            ),
+        )
 
-    timeline_stages_trace = list(
-        timeline_stages_fig.select_traces()
+    _trace = list(
+        _fig.select_traces()
     )
+    
+    assert len(_trace) == 1
+    return _trace[0]
+    
 
-    assert len(timeline_stages_trace) == 1
-    timeline_stages_trace = timeline_stages_trace[0]
+def create_chart_spill(
+    df: pd.DataFrame,
+    fig,
+    col_y: str,
+    row: int,
+    px_timeline_color_kwargs: dict = None,
+    app_info: dict = None,
+):
+    px_timeline_color_kwargs = px_timeline_color_kwargs or {}
+    
+    df = df[
+        df["memory_spill_disk"] > 0
+    ].copy().reset_index(drop=True)
+    
+    if not df.empty:
+        trace_not_empty = _create_trace_spill(
+            df,
+            col_y,
+            px_timeline_color_kwargs,
+        )
+
+        fig.add_trace(
+            trace_not_empty,
+            row=row,
+            col=1,
+        )
+    
+    executors_all = set(app_info[COL_ID_EXECUTOR])
+    
+    df_empty = (
+        pd.DataFrame(
+            [
+                {
+                    COL_ID_EXECUTOR: _id_executor,
+                    COL_SUBSTAGE_DATE_START: app_info[COL_SUBSTAGE_DATE_START],
+                    COL_SUBSTAGE_DATE_END: app_info[COL_SUBSTAGE_DATE_START],
+                }
+                for _id_executor in executors_all
+            ]
+            + [
+                {
+                    COL_ID_EXECUTOR: _id_executor,
+                    COL_SUBSTAGE_DATE_START: (
+                        app_info[COL_SUBSTAGE_DATE_END]
+                    ),
+                    COL_SUBSTAGE_DATE_END: (
+                        app_info[COL_SUBSTAGE_DATE_END]
+                    ),
+                }
+                for _id_executor in executors_all
+            ]
+        )
+    )
+    
+    df_empty.loc[:, "y_labels"] = ""
+    
+    trace_empty = _create_trace_spill(
+        df_empty,
+        col_y,
+        px_timeline_color_kwargs={},
+        opacity=0,
+        is_trace_hidden=True,
+    )
     
     fig.add_trace(
-        timeline_stages_trace,
-        row=2,
+        trace_empty,
+        row=row,
         col=1,
     )
 
     fig.update_xaxes(type="date")
 
-    logging.info("Creating chart timeline of stages: done\n")
+
+def create_chart_stages(
+    df: pd.DataFrame,
+    fig,
+    col_y: str,
+    row: int,
+    px_timeline_color_kwargs: dict = None,
+):
+    px_timeline_color_kwargs = px_timeline_color_kwargs or {}
+    
+    if df.empty:
+    
+        raise NotImplementedError
+    
+    else:
+        
+        # Plotly can"t handle ns
+        # plotly.express._core == 5.7.0, line 1681
+        # args["data_frame"][args["x_end"]] = (x_end - x_start).astype("timedelta64[ms]")
+        df.loc[:, COL_SUBSTAGE_DATE_START] = (
+            df[COL_SUBSTAGE_DATE_START].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+        )
+    
+        df.loc[:, COL_SUBSTAGE_DATE_END] = (
+            df[COL_SUBSTAGE_DATE_END].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+        )
+    
+        timeline_stages_fig = px.timeline(
+            data_frame=df,
+            x_start=COL_SUBSTAGE_DATE_START,
+            x_end=COL_SUBSTAGE_DATE_END,
+            y=col_y,
+            text="y_labels",
+            **px_timeline_color_kwargs,
+        )
+        
+        _len = len(df)
+        _start = pd.to_datetime(df[COL_SUBSTAGE_DATE_START], format=GANTT_XAXIS_DATETIME_FORMAT)
+        _end = pd.to_datetime(df[COL_SUBSTAGE_DATE_END], format=GANTT_XAXIS_DATETIME_FORMAT)
+        _duration = (_end - _start).astype("timedelta64[s]")
+        
+        _hovertext = (
+            pd.Series(["Stage: <b>"] * _len)
+            + df["y_labels"]
+            + pd.Series(["</b>"] * _len)
+            + pd.Series(["<br>"] * _len)
+            + _start.dt.strftime("%H:%M:%S")
+            + pd.Series([" to "] * _len)
+            + _end.dt.strftime("%H:%M:%S")
+            + pd.Series([" ("] * _len)
+            + _duration.map("{:.0f}".format)
+            + pd.Series([" sec)"] * _len)
+        )
+    
+        timeline_stages_fig.update_traces(
+            hovertext=_hovertext,
+            hovertemplate=(
+                "%{hovertext}"
+                "<extra></extra>"
+            ),
+            marker_line=dict(
+                width=1,
+                color="white",
+            ),
+            marker_color="black",
+            textposition="inside",
+            textangle=0,
+            insidetextanchor="middle",
+        )
+    
+        timeline_stages_trace = list(
+            timeline_stages_fig.select_traces()
+        )
+    
+        assert len(timeline_stages_trace) == 1
+        timeline_stages_trace = timeline_stages_trace[0]
+        
+        fig.add_trace(
+            timeline_stages_trace,
+            row=row,
+            col=1,
+        )
+    
+        fig.update_xaxes(type="date")

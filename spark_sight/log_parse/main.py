@@ -1,6 +1,5 @@
 import logging
-from decimal import Decimal
-from typing import List, Iterable, Set, Union
+from typing import List, Set, Union
 
 import pandas as pd
 
@@ -39,7 +38,6 @@ def extract_task_info(
 
     """
     _log_root = "Extracting task information from Spark event log"
-    logging.info(f"{_log_root}...")
 
     _perc_log_dict = [0.25, 0.5, 0.75]
     _perc_log_index = 0
@@ -89,8 +87,6 @@ def extract_task_info(
             )
             _perc_log_index += 1
         
-    logging.info(f"{_log_root}: done\n")
-    
     return df
 
 
@@ -186,6 +182,7 @@ def convert_line_to_metrics(
         "id": {
             "task": task["Task Info"]["Task ID"],
             "stage": task["Stage ID"],
+            "executor": int(task["Task Info"]["Executor ID"]),
         },
         "date": {
             "start": task["Task Info"]["Launch Time"],
@@ -228,12 +225,16 @@ def convert_line_to_metrics(
                 }
             }
         },
-        # "memory": {
-        #     "spill": {
-        #         "disk": task["Task Metrics"]["Disk Bytes Spilled"],
-        #         "memory": task["Task Metrics"]["Memory Bytes Spilled"],
-        #     }
-        # },
+        "memory": {
+            "spill": {
+                "disk": float(
+                    task["Task Metrics"]["Disk Bytes Spilled"]
+                ),
+                # "memory": float(
+                #     task["Task Metrics"]["Memory Bytes Spilled"]
+                # ),
+            }
+        },
     }
     
     _dict_base["date"]["start"] = (

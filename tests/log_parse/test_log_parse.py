@@ -1,5 +1,4 @@
 import json
-from decimal import Decimal
 from pathlib import Path
 from typing import List
 
@@ -45,8 +44,8 @@ def test_extract_events_tasks():
                 "Result Size": 2926,
                 "JVM GC Time": 433,
                 "Result Serialization Time": 1,
-                "Memory Bytes Spilled": 0,
-                "Disk Bytes Spilled": 0,
+                "Memory Bytes Spilled": 40,
+                "Disk Bytes Spilled": 30,
                 "Shuffle Read Metrics": {
                     "Remote Blocks Fetched": 0,
                     "Local Blocks Fetched": 0,
@@ -80,8 +79,8 @@ def test_extract_events_tasks():
                 "Result Size": 2883,
                 "JVM GC Time": 433,
                 "Result Serialization Time": 0,
-                "Memory Bytes Spilled": 0,
-                "Disk Bytes Spilled": 0,
+                "Memory Bytes Spilled": 30,
+                "Disk Bytes Spilled": 20,
                 "Shuffle Read Metrics": {
                     "Remote Blocks Fetched": 0,
                     "Local Blocks Fetched": 0,
@@ -181,8 +180,8 @@ def test_convert_line_to_metrics():
                 "Result Size": 2926,
                 "JVM GC Time": 433,
                 "Result Serialization Time": 1,
-                "Memory Bytes Spilled": 0,
-                "Disk Bytes Spilled": 0,
+                "Memory Bytes Spilled": 40,
+                "Disk Bytes Spilled": 30,
                 "Shuffle Read Metrics": {
                     "Remote Blocks Fetched": 0,
                     "Local Blocks Fetched": 0,
@@ -202,7 +201,7 @@ def test_convert_line_to_metrics():
     )
     
     assert result == {
-        'id': {'task': 1, 'stage': 0},
+        'id': {'task': 1, 'stage': 0, 'executor': 3},
         'date': {
             'start': Timestamp('2022-03-30 12:59:16.108999936'),
             'end': Timestamp('2022-03-30 12:59:30.470000128')
@@ -214,6 +213,11 @@ def test_convert_line_to_metrics():
                     'serde': float('44113527'),
                     'shuffle': float('259617517')
                 }
+            }
+        },
+        'memory': {
+            'spill': {
+                'disk': 30,
             }
         }
     }

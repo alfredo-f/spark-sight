@@ -1,18 +1,25 @@
+from plotly.graph_objs import Figure
+
 import argparse
 import json
 import logging
 import os.path
 import sys
 import warnings
-from decimal import Decimal
 from json import JSONDecodeError
 from pathlib import Path
 
+from plotly.graph_objs import Figure
 from plotly.subplots import make_subplots
 
 from spark_sight.create_charts.parsing_spark_history_server import (
     create_chart_efficiency,
-    create_chart_timeline_stages,
+    create_chart_stages,
+    assign_y_to_stages,
+    create_chart_spill,
+)
+from spark_sight.data_references import (
+    COL_ID_EXECUTOR,
 )
 from spark_sight.data_references import (
     COL_ID_STAGE,
@@ -21,6 +28,7 @@ from spark_sight.data_references import (
     COL_SUBSTAGE_DURATION,
     COL_STAGE_DATE_START,
     COL_STAGE_DATE_END,
+    COL_SUBSTAGE_DATE_INTERVAL,
 )
 from spark_sight.log_parse.main import (
     extract_task_info,
@@ -32,7 +40,6 @@ from spark_sight.log_transform.main import \
     aggregate_tasks_in_substages,
     create_duration_stage,
 )
-from spark_sight.util import is_latest_version, configure_pandas
 
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -84,8 +91,6 @@ def determine_cpus_available(
             f"Invalid deploy mode: {deploy_mode}"
         )
     
-    logging.info("Computing CPU cores available for tasks...")
-    
     cpus_available = cpus
 
     logging.debug(
@@ -100,25 +105,213 @@ def determine_cpus_available(
         )
         cpus_available -= 1
 
-    logging.info(
-        "Computing CPU cores available for tasks: done"
-        f". Deploy mode {DEPLOY_MODE_MAP_OUTPUT[deploy_mode]}"
-        f", CPU cores available for tasks: {cpus_available}"
-        "\n"
-    )
-
     return cpus_available
 
 
-def _main(
-    path_spark_event_log,
-    cpus: int,
-    deploy_mode: str = DEPLOY_MODE_CLUSTER,
+def update_layout(
+    fig: Figure,
+    id_executor_max: int,
+    cmin: float,
+    cmax: float,
+    df_fig_memory_empty: bool,
+):
+    _id_executor_max = id_executor_max + 1
+    LAYOUT_EFFICIENCY_ROW = 1
+    LAYOUT_TIMELINE_SPILL_ROW = 2
+    LAYOUT_TIMELINE_STAGES_ROW = 3
+    
+    _margin = 50
+    
+    fig.update_layout(
+        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        title_text="Efficiency: tasks CPU time / available CPU time of cluster",
+        title_font_size=20,
+        title_pad_l=_margin,
+        title_pad_r=_margin,
+        title_pad_t=_margin,
+        title_pad_b=_margin,
+        showlegend=False,
+    )
+
+    _id_executor_range = range(1, _id_executor_max)
+    
+    fig.update_yaxes(
+        tickmode='array',
+        tickvals=list(_id_executor_range),
+        ticktext=[
+            f"Executor {_id_executor}"
+            for _id_executor in _id_executor_range
+        ],
+        autorange="reversed",
+        row=LAYOUT_TIMELINE_SPILL_ROW,
+        col=1,
+    )
+    
+    fig.update_yaxes(
+        showticklabels=False,
+        autorange="reversed",
+        row=LAYOUT_TIMELINE_STAGES_ROW,
+        col=1,
+    )
+    
+    fig.update_yaxes(
+        tickformat=",.0%",
+        range=[0, 1.0],
+        row=LAYOUT_EFFICIENCY_ROW,
+        col=1,
+    )
+    
+    update_coloraxes_kwargs = dict(
+        colorscale=[
+            "#e5ecf6",
+            "#b300ff",
+        ],
+        cmin=cmin,
+        cmax=cmax,
+        showscale=False,
+    )
+    
+    fig.update_coloraxes(
+        **update_coloraxes_kwargs
+    )
+    
+    # TODO x in the center of period
+    if df_fig_memory_empty:
+        annotation_x = (
+            min(fig.data[0].x) + (
+                (
+                    max(fig.data[0].x) - min(fig.data[0].x)
+                )
+                / 2
+            )
+        )
+        
+        annotation_y = (
+            id_executor_max / 2
+            + 0.5
+        )
+        
+        fig.add_annotation(
+            text="No spill, congrats!",
+            xref="paper",
+            yref="paper",
+            x=annotation_x,
+            y=annotation_y,
+            font=dict(
+                size=18,
+            ),
+            showarrow=False,
+            row=LAYOUT_TIMELINE_SPILL_ROW,
+            col=1,
+        )
+    
+    
+def create_figure(
+    df_fig_efficiency,
+    df_fig_timeline_stage,
+    df_fig_spill,
+    cpus_available: int,
+    app_info: dict,
+):
+    _charts_share_timeline = 0.2
+    _charts_share_spill = 0.2
+    _charts_share_efficiency = 0.6
+    assert 1 == sum(
+        [
+            _charts_share_timeline,
+            _charts_share_spill,
+            _charts_share_efficiency,
+        ]
+    )
+    
+    fig = make_subplots(
+        rows=3,
+        shared_xaxes=True,
+        vertical_spacing=0.02,
+        row_width=[
+            _charts_share_timeline,
+            _charts_share_spill,
+            _charts_share_efficiency,
+        ],
+    )
+    
+    create_chart_efficiency(
+        df_fig_efficiency,
+        fig,
+        cpus_available=cpus_available,
+    )
+    
+    stages_y = assign_y_to_stages(df_fig_timeline_stage)
+    df_fig_timeline_stage.loc[:, "y"] = df_fig_timeline_stage[COL_ID_STAGE].astype(str).replace(
+        stages_y
+    )
+    
+    df_fig_timeline_stage.loc[:, "y_labels"] = (
+        df_fig_timeline_stage[COL_ID_STAGE].map("{:.0f}".format)
+    )
+
+    df_fig_timeline_stage.loc[:, "fig_color"] = (
+        "red"
+    )
+    
+    df_fig_spill_empty = df_fig_spill[
+        df_fig_spill["memory_spill_disk"] > 0
+    ].empty
+    
+    cmin = 0
+    
+    if df_fig_spill_empty:
+        cmax = 1_000_000
+        
+    else:
+        df_fig_spill = df_fig_spill[
+            df_fig_spill["memory_spill_disk"] > 0
+        ].copy()
+
+        cmax = df_fig_spill["memory_spill_disk"].max()
+        
+    id_executor_max = max(
+        app_info[COL_ID_EXECUTOR]
+    )
+    
+    # https://plotly.com/python/reference/layout/yaxis/#layout-yaxis-exponentformat
+    create_chart_spill(
+        df_fig_spill,
+        fig,
+        col_y=COL_ID_EXECUTOR,
+        row=2,
+        # Color is discarded because trace is extracted from plotly.express
+        px_timeline_color_kwargs=dict(
+            color="memory_spill_disk",
+        ),
+        app_info=app_info,
+    )
+
+    create_chart_stages(
+        df_fig_timeline_stage,
+        fig,
+        col_y="y",
+        row=3,
+    )
+    
+    update_layout(
+        fig,
+        id_executor_max=id_executor_max,
+        cmin=cmin,
+        cmax=cmax,
+        df_fig_memory_empty=df_fig_spill_empty,
+    )
+    
+    return fig
+
+
+def parse_event_log(
+    path_spark_event_log: str,
 ):
     lines_tasks = []
     lines_stages = []
 
-    logging.info("Parsing Spark event log...")
+    _log_root = "Parsing Spark event log"
     
     try:
         _file = open(
@@ -140,7 +333,7 @@ def _main(
         for _line_index, _line in enumerate(_file):
             try:
                 _line = json.loads(_line)
-            
+                
                 if _line["Event"] == "SparkListenerStageCompleted":
                     lines_stages.append(_line)
                 elif _line["Event"] == "SparkListenerTaskEnd":
@@ -154,12 +347,126 @@ def _main(
                 and _perc > _perc_log_dict[_perc_log_index]
             ):
                 logging.info(
-                    "Parsing Spark event log: "
+                    f"{_log_root}: "
                     f"{_perc_log_dict[_perc_log_index] * 100:.0f}%"
                 )
                 _perc_log_index += 1
+    
+    return (
+        lines_tasks,
+        lines_stages,
+    )
 
-    logging.info("Parsing Spark event log: done\n")
+
+def create_df_fig_efficiency(
+    task_info,
+    cpus_available
+):
+    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
+        task_info,
+    )
+
+    metrics = [
+        "duration_cpu_usage",
+        "duration_cpu_overhead_serde",
+        "duration_cpu_overhead_shuffle",
+    ]
+
+    task_info_split = split_on_borders(
+        task_info,
+        borders_all=borders_of_stages_asoftasks,
+        metrics=metrics,
+    )
+    
+    task_grouped = aggregate_tasks_in_substages(
+        task_info_split,
+        borders_all=borders_of_stages_asoftasks,
+        metrics=metrics,
+        cols_groupby=[COL_SUBSTAGE_DATE_INTERVAL],
+    )
+    
+    task_grouped.loc[:, "duration_agg_cpu_available"] = (
+        task_grouped[COL_SUBSTAGE_DURATION]
+        * cpus_available
+    )
+    
+    for _metric in metrics:
+        task_grouped.loc[:, f"efficiency__{_metric}"] = (
+            task_grouped[_metric]
+            / task_grouped["duration_agg_cpu_available"]
+        )
+    
+    task_grouped.loc[:, COL_SUBSTAGE_DURATION] = (
+        task_grouped[COL_SUBSTAGE_DURATION]
+        / float(1e9)
+    )
+    
+    df_fig_efficiency = task_grouped[
+        [
+            COL_SUBSTAGE_DATE_START,
+            COL_SUBSTAGE_DATE_END,
+            COL_SUBSTAGE_DURATION,
+            COL_ID_STAGE,
+        ]
+        + list(
+            task_grouped.columns[
+                task_grouped.columns.str.startswith("efficiency__")
+            ]
+        )
+    ]
+    
+    return df_fig_efficiency
+
+
+def create_df_fig_spill(task_info):
+    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
+        task_info,
+    )
+    
+    metrics = [
+        "memory_spill_disk",
+    ]
+    
+    task_info_split = split_on_borders(
+        task_info,
+        borders_all=borders_of_stages_asoftasks,
+        metrics=metrics,
+    )
+    
+    task_grouped = aggregate_tasks_in_substages(
+        task_info_split,
+        borders_all=borders_of_stages_asoftasks,
+        metrics=metrics,
+        cols_groupby=[
+            COL_ID_EXECUTOR,
+            COL_SUBSTAGE_DATE_INTERVAL,
+        ]
+    )
+    
+    task_grouped.loc[:, COL_SUBSTAGE_DURATION] = (
+        task_grouped[COL_SUBSTAGE_DURATION]
+        / float(1e9)
+    )
+    
+    return task_grouped
+
+
+def _main(
+    path_spark_event_log,
+    cpus: int,
+    deploy_mode: str = DEPLOY_MODE_CLUSTER,
+):
+    _log_root = "Parsing Spark event log"
+    logging.info(f"{_log_root}...")
+    
+    (
+        lines_tasks,
+        lines_stages,
+    ) = parse_event_log(
+        path_spark_event_log,
+    )
+
+    logging.info(f"{_log_root}: done\n")
     
     if len(lines_tasks) == 0 or len(lines_stages) == 0:
         logging.critical(
@@ -181,11 +488,16 @@ def _main(
             _["Stage ID"]
             for _ in lines_tasks
         )
+
+        _log_root = "Extracting task information from Spark event log"
+        logging.info(f"{_log_root}...")
         
         task_info = extract_task_info(
             lines_tasks=lines_tasks,
             stage_ids=stage_ids_all,
         )
+        
+        logging.info(f"{_log_root}: done\n")
         
     except Exception:
         logging.critical(
@@ -193,72 +505,44 @@ def _main(
         )
         
         return
-    
-    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
-        task_info,
-    )
-    
-    task_info_split = split_on_borders(
-        task_info,
-        borders_of_stages_asoftasks,
-        metrics=[
-            "duration_cpu_usage",
-            "duration_cpu_overhead_serde",
-            "duration_cpu_overhead_shuffle",
-        ],
-    )
 
+    _log_root = "Computing CPU cores available for tasks"
+    logging.info(f"{_log_root}...")
+    
     cpus_available = determine_cpus_available(
         cpus,
         deploy_mode,
     )
     
-    task_grouped = aggregate_tasks_in_substages(
-        task_info_split,
-        borders_of_stages_asoftasks,
-        cpus_available=cpus_available,
-        metrics=[
-            "duration_cpu_usage",
-            "duration_cpu_overhead_serde",
-            "duration_cpu_overhead_shuffle",
-        ],
+    logging.info(f"{_log_root}: done\n")
+    
+    _log_root = "Creating chart of task efficiency"
+    logging.info(f"{_log_root}...")
+    
+    df_fig_efficiency = create_df_fig_efficiency(
+        task_info,
+        cpus_available,
+    )
+    
+    logging.info(f"{_log_root}: done\n")
+    
+    _log_root = "Creating chart of spill"
+    logging.info(f"{_log_root}...")
+    
+    df_fig_spill = create_df_fig_spill(
+        task_info,
+    )
+    
+    df_fig_spill.loc[:, COL_ID_EXECUTOR] = (
+        df_fig_spill[COL_ID_EXECUTOR].astype(float)
     )
 
-    task_grouped.loc[:, COL_SUBSTAGE_DURATION] = (
-        task_grouped[COL_SUBSTAGE_DURATION]
-        / float(1e9)
-    )
+    logging.info(f"{_log_root}: done\n")
     
-    task_grouped = task_grouped[
-        [
-            COL_SUBSTAGE_DATE_START,
-            COL_SUBSTAGE_DATE_END,
-            COL_SUBSTAGE_DURATION,
-            COL_ID_STAGE,
-        ]
-        + list(
-            task_grouped.columns[
-                task_grouped.columns.str.startswith("efficiency__")
-            ]
-        )
-    ]
+    _log_root = "Creating chart of stage timeline"
+    logging.info(f"{_log_root}...")
     
-    _charts_share = 0.2
-    
-    fig = make_subplots(
-        rows=2,
-        shared_xaxes=True,
-        vertical_spacing=0.02,
-        row_width=[_charts_share, 1 - _charts_share],
-    )
-
-    create_chart_efficiency(
-        task_grouped,
-        fig,
-        cpus_available=cpus_available,
-    )
-    
-    _df_stage = (
+    df_fig_timeline_stage = (
         create_duration_stage(
             lines_stages,
             stage_ids_completed,
@@ -271,39 +555,39 @@ def _main(
         )
     )
     
-    create_chart_timeline_stages(
-        _df_stage,
-        fig,
-    )
+    logging.info(f"{_log_root}: done\n")
     
-    _margin = 50
+    app_info = {
+        **(
+            task_info
+            .groupby(lambda _: True)
+            .agg(
+                {
+                    COL_ID_EXECUTOR: "unique",
+                }
+            )
+            .to_dict(orient="records")[0]
+        ),
+        **(
+            df_fig_timeline_stage
+            .groupby(lambda _: True)
+            .agg(
+                {
+                    COL_SUBSTAGE_DATE_START: "min",
+                    COL_SUBSTAGE_DATE_END: "max",
+                }
+            )
+            .to_dict(orient="records")[0]
+        ),
+    }
     
-    fig.update_layout(
-        margin=dict(l=_margin, r=_margin, t=40, b=5),
-        title_text="Efficiency: tasks CPU time / available CPU time of cluster",
-        title_font_size=20,
-        title_pad_l=_margin,
-        title_pad_r=_margin,
-        title_pad_t=_margin,
-        title_pad_b=_margin,
-        showlegend=False,
+    return create_figure(
+        df_fig_efficiency,
+        df_fig_timeline_stage,
+        df_fig_spill,
+        cpus_available=cpus_available,
+        app_info=app_info,
     )
-
-    fig.update_yaxes(
-        showticklabels=False,
-        autorange="reversed",
-        row=2,
-        col=1,
-    )
-    
-    fig.update_yaxes(
-        tickformat=",.0%",
-        range=[0, 1.0],
-        row=1,
-        col=1,
-    )
-
-    return fig
 
 
 def main(

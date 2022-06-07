@@ -1,5 +1,4 @@
 import logging
-from decimal import Decimal
 from typing import List, Tuple
 
 import pandas as pd
@@ -54,8 +53,8 @@ def check_tasks_are_split_correctly(
 def aggregate_tasks_in_substages(
     df: pd.DataFrame,
     borders_all: List[datetime64],
-    cpus_available: int,
     metrics: List[str],
+    cols_groupby: List[str],
 ) -> pd.DataFrame:
     """Aggregate task metrics within the substage intervals.
     
@@ -73,11 +72,10 @@ def aggregate_tasks_in_substages(
     borders_all : list of datetimes
         List of borders, including external borders
         of first stage start and last stage end.
-    cpus_available : int
-        Total number of CPU usable for task execution.
-        Used to compute the efficiency
     metrics : list of str
         List of metric strings to aggregate (sum).
+    cols_groupby : list of str
+        Columns to group by to aggregate the metrics.
 
     Returns
     -------
@@ -87,13 +85,8 @@ def aggregate_tasks_in_substages(
         * substage interval
         * unique stage ids of the tasks that have been aggregated
         * aggregate metric
-        * efficiency for the metric
     
     """
-    logging.info(
-        "Aggregating tasks within the substage intervals..."
-    )
-
     df.loc[:, COL_SUBSTAGE_DATE_INTERVAL] = (
         pd.cut(
             df[COL_TASK_DATE_END],
@@ -106,7 +99,7 @@ def aggregate_tasks_in_substages(
     grouped = (
         df
         .groupby(
-            COL_SUBSTAGE_DATE_INTERVAL,
+            cols_groupby,
         )
         .agg(
             {
@@ -119,6 +112,10 @@ def aggregate_tasks_in_substages(
         )
         .reset_index()
     )
+
+    grouped = grouped[
+        grouped[COL_ID_STAGE].notna()
+    ]
     
     grouped = (
         grouped[
@@ -155,22 +152,6 @@ def aggregate_tasks_in_substages(
         )
     )
     
-    grouped.loc[:, "duration_agg_cpu_available"] = (
-        grouped[COL_SUBSTAGE_DURATION]
-        * cpus_available
-    )
-    
-    for _metric in metrics:
-        grouped.loc[:, f"efficiency__{_metric}"] = (
-            grouped[_metric]
-            / grouped["duration_agg_cpu_available"]
-        )
-
-    logging.info(
-        "Aggregating tasks within the substage intervals"
-        ": done\n"
-    )
-    
     return grouped
 
 
@@ -205,8 +186,6 @@ def split_on_borders(
         The id task column may not be primary key.
     
     """
-    logging.info("Splitting tasks across borders...")
-    
     threshold_metrics_discard = 1e-2
     borders_inner = borders_all[1:-1]
     df_split = task_info.copy()
@@ -243,12 +222,8 @@ def split_on_borders(
             ) = split_single_border(
                 border=border,
                 to_split_row=to_split_row,
-                metrics=metrics,
-                id_task__border=(
-                    f"task_{to_split_row['id_task']}"
-                    f"__border_{index_border}"
-                ),
-            )
+                metrics=metrics
+                )
             
             line_just_split_index.append(
                 to_split_index
@@ -281,27 +256,17 @@ def split_on_borders(
             line_just_split_rows_split,
             ignore_index=True,
         )
-
-    logging.info("Splitting tasks across borders: done\n")
         
+        df_split = df_split.reset_index(drop=True)
+
     return df_split
 
 
 def split_row_in_two(
-    id_task__border,
     to_split_row_generic,
 ) -> (pd.Series, pd.Series):
     to_split_row_left = to_split_row_generic.copy()
-    to_split_row_left[COL_SPLIT_BORDERS_LIST] = (
-        to_split_row_left[COL_SPLIT_BORDERS_LIST][:]
-        + [id_task__border + "_left"]
-    )
-
     to_split_row_right = to_split_row_generic.copy()
-    to_split_row_right[COL_SPLIT_BORDERS_LIST] = (
-        to_split_row_right[COL_SPLIT_BORDERS_LIST][:]
-        + [id_task__border + "_right"]
-    )
     
     return (
         to_split_row_left,
@@ -313,7 +278,6 @@ def split_single_border(
     border: datetime64,
     to_split_row: pd.Series,
     metrics: List[str],
-    id_task__border: str,
 ) -> Tuple[pd.Series, pd.Series]:
     """Split the task across the border.
     
@@ -326,9 +290,6 @@ def split_single_border(
     metrics : list of str
         List of metric strings present in the task Pandas series
         to split proportionally to the new task lengths.
-    id_task__border : str
-        Identifier for the new generated tasks. Contains
-        original task information and border id.
     
     Returns
     -------
@@ -338,6 +299,9 @@ def split_single_border(
         New task, right split.
     
     """
+
+    border_left = None
+    border_right = None
     
     if len(metrics) == 0:
         raise ValueError("Provided empty metrics")
@@ -345,10 +309,7 @@ def split_single_border(
     (
         _left,
         _right,
-    ) = split_row_in_two(
-        id_task__border,
-        to_split_row,
-    )
+    ) = split_row_in_two(to_split_row)
     
     for metric in metrics:
         metric_total = _left[metric]
@@ -423,10 +384,6 @@ def determine_borders_of_stages_asoftasks(
         of stage start and stage end.
     
     """
-    logging.info(
-        "Determining borders of stages as of first and last tasks..."
-    )
-    
     for id_stage in task_info[COL_ID_STAGE].unique():
         logging.debug(f"Stage {id_stage}")
         
@@ -466,10 +423,6 @@ def determine_borders_of_stages_asoftasks(
     borders_all = sorted(list(borders_all))
     
     logging.debug(f"Borders {borders_all}")
-    logging.info(
-        "Determining borders of stages as of first and last tasks"
-        ": done\n"
-    )
     
     return borders_all
 

@@ -2,21 +2,29 @@
 
 <br/>
 
-[<img src="images/chrome_366lyjRAot.gif">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+[<img src="images/intro.gif">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
 
 <br/>
 
-[<img src="images/chrome_7fwtosJQ0I.gif">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+[<img src="images/intro_scroll.gif">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+
+Read more on Medium:
+
+1. Part 1: [Meet "spark-sight": Spark Performance at a Glance](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+2. Part 2: [“spark-sight” Shows Spill: Skewed Data and Executor Memory](https://medium.com/@alfredo.fomitchenko/spark-sight-shows-spill-skewed-data-and-executor-memory-9169b79ca66e)
+
+[<img src="images/logo_medium.png" width="300">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
 
 ## What is it?
+
 **spark-sight** is a less detailed, more intuitive representation 
 of what is going on inside your Spark application in terms of performance:
 
 * CPU time spent doing the “actual work”
 * CPU time spent doing shuffle reading and writing
 * CPU time spent doing serialization and deserialization
+* Spill intensity per executor (v0.1.8 or later)
 * (coming) Memory usage per executor
-* (coming) Memory spill intensity per stage
 
 **spark-sight** is not meant to replace the Spark UI altogether,
 rather it provides a bird’s-eye view of the stages
@@ -24,14 +32,25 @@ allowing you to identify at a glance
 which portions of the execution may need improvement.
 
 ## Main features
-The Plotly figure consists of two charts with synced x-axis:
-* top chart: **efficiency** in terms of CPU cores available for tasks
+The Plotly figure consists of charts with synced x-axis.
 
-![](images/chrome_Z4O7K79Pgk.gif)
+### Top chart: efficiency
 
-* bottom chart: stages **timeline**
+The top chart shows **efficiency** in terms of CPU cores available for tasks
 
-![](images/chrome_pL0UHBeNIo.gif)
+![](images/charts_efficiency.gif)
+
+### Middle chart: spill
+
+The middle chart shows **spill** information
+
+![](images/spill3.gif)
+
+### Bottom chart: stage timeline
+
+The bottom chart shows stage **timeline**
+
+![](images/charts_timeline_stages)
 
 ## Where to get it
 
@@ -94,6 +113,16 @@ spark-sight `
 
 A new browser tab will be opened.
 
-## Read more
+## Read more on Medium
+
+### `spark-sight` Medium series, part 1
 
 [<img src="images/logo_medium.png" width="300">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+
+[Meet "spark-sight": Spark Performance at a Glance](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)
+
+### `spark-sight` Medium series, part 2
+
+[<img src="images/logo_medium.png" width="300">](https://medium.com/@alfredo.fomitchenko/spark-sight-shows-spill-skewed-data-and-executor-memory-9169b79ca66e)
+
+[“spark-sight” Shows Spill: Skewed Data and Executor Memory](https://medium.com/@alfredo.fomitchenko/spark-sight-shows-spill-skewed-data-and-executor-memory-9169b79ca66e)

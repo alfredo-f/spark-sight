@@ -99,6 +99,4 @@ metastore_db/
 /notes/
 
 # Test local
-/tests/test_e2e.py
-/tests/test_e2e.txt
 /tests/spark_event_logs/
