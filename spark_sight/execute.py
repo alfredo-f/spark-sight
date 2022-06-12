@@ -360,12 +360,9 @@ def parse_event_log(
 
 def create_df_fig_efficiency(
     task_info,
-    cpus_available
+    cpus_available,
+    borders_of_stages_asoftasks,
 ):
-    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
-        task_info,
-    )
-
     metrics = [
         "duration_cpu_usage",
         "duration_cpu_overhead_serde",
@@ -418,11 +415,10 @@ def create_df_fig_efficiency(
     return df_fig_efficiency
 
 
-def create_df_fig_spill(task_info):
-    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
-        task_info,
-    )
-    
+def create_df_fig_spill(
+    task_info,
+    borders_of_stages_asoftasks,
+):
     metrics = [
         "memory_spill_disk",
     ]
@@ -516,12 +512,22 @@ def _main(
     
     logging.info(f"{_log_root}: done\n")
     
+    _log_root = "Determining borders of stages"
+    logging.info(f"{_log_root}...")
+    
+    borders_of_stages_asoftasks = determine_borders_of_stages_asoftasks(
+        task_info,
+    )
+    
+    logging.info(f"{_log_root}: done\n")
+    
     _log_root = "Creating chart of task efficiency"
     logging.info(f"{_log_root}...")
     
     df_fig_efficiency = create_df_fig_efficiency(
         task_info,
         cpus_available,
+        borders_of_stages_asoftasks=borders_of_stages_asoftasks,
     )
     
     logging.info(f"{_log_root}: done\n")
@@ -531,6 +537,7 @@ def _main(
     
     df_fig_spill = create_df_fig_spill(
         task_info,
+        borders_of_stages_asoftasks=borders_of_stages_asoftasks,
     )
     
     df_fig_spill.loc[:, COL_ID_EXECUTOR] = (
