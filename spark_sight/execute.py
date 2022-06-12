@@ -1,3 +1,4 @@
+import pandas as pd
 from plotly.graph_objs import Figure
 
 import argparse
@@ -204,12 +205,57 @@ def update_layout(
             row=LAYOUT_TIMELINE_SPILL_ROW,
             col=1,
         )
+
+
+def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
+    import plotly.graph_objects as go
     
+    _fig = make_subplots(
+        rows=7,
+        shared_xaxes=True,
+    )
     
+    for id_executor in range(1, id_executor_max + 1):
+        _storage = df_fig_memory[
+            (df_fig_memory["id_executor"] == id_executor)
+            & (df_fig_memory["memory_type"] == "storage")
+        ]
+        
+        _execution = df_fig_memory[
+            (df_fig_memory["id_executor"] == id_executor)
+            & (df_fig_memory["memory_type"] == "execution")
+        ]
+        
+        _fig.add_trace(
+            go.Scatter(
+                x=_storage["date_end__task"], y=_storage["value"],
+                mode='lines+markers',
+                marker=dict(color="red"),
+                line=dict(color='rgba(255, 0, 0, 0.2)'),
+            ),
+            row=id_executor,
+            col=1,
+        )
+        
+        _fig.add_trace(
+            go.Scatter(
+                x=_execution["date_end__task"], y=_execution["value"],
+                mode='lines+markers',
+                marker=dict(color="blue"),
+                line=dict(color='rgba(0, 0, 255, 0.2)'),
+            ),
+            row=id_executor,
+            col=1,
+        )
+        
+    _fig.show()
+
+
 def create_figure(
     df_fig_efficiency,
     df_fig_timeline_stage,
     df_fig_spill,
+    df_fig_memory,
     cpus_available: int,
     app_info: dict,
 ):
@@ -292,6 +338,12 @@ def create_figure(
         fig,
         col_y="y",
         row=3,
+    )
+    
+    create_chart_memory(
+        df_fig_memory,
+        fig,
+        id_executor_max=id_executor_max,
     )
     
     update_layout(
@@ -454,7 +506,7 @@ def _main(
 ):
     _log_root = "Parsing Spark event log"
     logging.info(f"{_log_root}...")
-    
+
     (
         lines_tasks,
         lines_stages,
@@ -463,16 +515,16 @@ def _main(
     )
 
     logging.info(f"{_log_root}: done\n")
-    
+
     if len(lines_tasks) == 0 or len(lines_stages) == 0:
         logging.critical(
             compose_str_exception_file_invalid_content(
                 path_spark_event_log
             )
         )
-    
+
         return
-    
+
     try:
         stage_ids_completed = set(
             _["Stage Info"]["Stage ID"]
@@ -482,20 +534,64 @@ def _main(
         
         _log_root = "Extracting task information from Spark event log"
         logging.info(f"{_log_root}...")
-        
+
         task_info = extract_task_info(
             lines_tasks=lines_tasks,
         )
-        
+
         logging.info(f"{_log_root}: done\n")
-        
+
     except Exception:
         logging.critical(
             compose_str_exception_file_invalid_content(path_spark_event_log)
         )
-        
+
         return
 
+    print("LINE CHARTSSSSSSSSSSSSSSSSSSSSSSS")
+
+    _task_info = (
+        task_info
+        .groupby(
+            ["id_executor", "date_end__task"],
+            as_index=False,
+        )
+        .agg(
+            {
+                "memory_usage_storage": "max",
+                "memory_usage_execution": "max",
+            }
+        )
+        .sort_values("date_end__task").reset_index(drop=True)
+    )
+    
+    _lines = pd.DataFrame()
+    _storage = _task_info[
+        ["id_executor", "memory_usage_storage",
+        "date_end__task"]
+    ].rename(
+        columns={
+            "memory_usage_storage": "value",
+        }
+    )
+    _execution = _task_info[
+        ["id_executor", "memory_usage_execution",
+        "date_end__task"]
+    ].rename(
+        columns={
+            "memory_usage_execution": "value",
+        }
+    )
+    _storage.loc[:, "memory_type"] = "storage"
+    _execution.loc[:, "memory_type"] = "execution"
+    
+    df_fig_memory = pd.concat(
+        [
+            _storage,
+            _execution,
+        ]
+    )
+    
     _log_root = "Computing CPU cores available for tasks"
     logging.info(f"{_log_root}...")
     
@@ -586,6 +682,7 @@ def _main(
         df_fig_efficiency,
         df_fig_timeline_stage,
         df_fig_spill,
+        df_fig_memory,
         cpus_available=cpus_available,
         app_info=app_info,
     )

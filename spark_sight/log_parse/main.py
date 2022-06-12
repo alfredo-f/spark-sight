@@ -181,6 +181,12 @@ def convert_line_to_metrics(
         "memory_spill_disk": float(
             task["Task Metrics"]["Disk Bytes Spilled"]
         ),
+        "memory_usage_execution": float(
+            task['Task Executor Metrics']["OnHeapExecutionMemory"]
+        ),
+        "memory_usage_storage": float(
+            task['Task Executor Metrics']["OnHeapStorageMemory"]
+        ),
     }
     
     return _dict_base
