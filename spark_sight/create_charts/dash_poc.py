@@ -127,6 +127,48 @@ if __name__ == '__main__':
     )
     
     fig_stages.update_xaxes(type="date")
+
+    LAYOUT_EFFICIENCY_ROW = 1
+    LAYOUT_TIMELINE_SPILL_ROW = 2
+    LAYOUT_TIMELINE_STAGES_ROW = 3
+
+    _margin = 50
+
+    fig_efficiency.update_layout(
+        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        title_text="Efficiency: tasks CPU time / available CPU time of cluster",
+        title_font_size=20,
+        title_pad_l=_margin,
+        title_pad_r=_margin,
+        title_pad_t=_margin,
+        title_pad_b=_margin,
+        showlegend=False,
+    )
+    
+    fig_stages.update_layout(
+        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        title_text="Efficiency: tasks CPU time / available CPU time of cluster",
+        title_font_size=20,
+        title_pad_l=_margin,
+        title_pad_r=_margin,
+        title_pad_t=_margin,
+        title_pad_b=_margin,
+        showlegend=False,
+    )
+
+    fig_stages.update_yaxes(
+        showticklabels=False,
+        autorange="reversed",
+        row=LAYOUT_TIMELINE_STAGES_ROW,
+        col=1,
+    )
+
+    fig_efficiency.update_yaxes(
+        tickformat=",.0%",
+        range=[0, 1.0],
+        row=LAYOUT_EFFICIENCY_ROW,
+        col=1,
+    )
     
     app.layout = html.Div(
         [
@@ -134,36 +176,25 @@ if __name__ == '__main__':
                 [
                     dbc.Row(
                         [
-                            html.Div(
-                                [
-                                    dcc.Graph(
-                                        id='id-fig-efficiency',
-                                        figure=fig_efficiency,
-                                    )
-                                ],
+                            dcc.Graph(
+                                id='id-fig-efficiency',
+                                figure=fig_efficiency,
                                 style={"height": "50vh"},
                             ),
                         ],
-                        style={"height": "50vh"},
                     ),
                     dbc.Row(
                         [
-                            html.Div(
-                                [
-                                    dcc.Graph(
-                                        id='id-fig-stages',
-                                        figure=fig_stages,
-                                    )
-                                ],
+                            dcc.Graph(
+                                id='id-fig-stages',
+                                figure=fig_stages,
                                 style={"height": "50vh"},
                             )
                         ],
-                        style={"height": "50vh"},
                     )
                 ],
-                style={"height": "50vh"},
             ),
         ],
-        style={"height":"50vh"},
+        style={"height": "100vh"},
     )
     app.run_server(debug=False)
