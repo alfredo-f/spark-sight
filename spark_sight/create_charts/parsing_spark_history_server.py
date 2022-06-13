@@ -1,3 +1,5 @@
+from math import floor
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -15,6 +17,24 @@ from spark_sight.data_references import (
 GANTT_XAXIS_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 GANTT_BARS_DISTANCE = 0.5
 GANTT_BARS_HEIGHT = 0.4
+
+
+def create_hovertext_date_range(
+    _start,
+    _end,
+    _duration,
+    _len,
+):
+    _duration_text = _duration.apply(format_duration_sec)
+    
+    return (
+        _start.dt.strftime("%H:%M:%S")
+        + pd.Series([" to "] * _len)
+        + _end.dt.strftime("%H:%M:%S")
+        + pd.Series([" ("] * _len)
+        + _duration_text
+        + pd.Series([")"] * _len)
+    )
 
 
 def create_chart_efficiency(
@@ -65,14 +85,19 @@ def create_chart_efficiency(
         _df = df_fig[df_fig["metric"] == _metric].copy().reset_index(drop=True)
         _y = _df["value"]
         _len = len(_y)
+        _start = _df[COL_SUBSTAGE_DATE_START]
+        _end = _df[COL_SUBSTAGE_DATE_END]
+        _duration = _df[COL_SUBSTAGE_DURATION]
+        
+        _hovertext_date_range = create_hovertext_date_range(
+            _start,
+            _end,
+            _duration,
+            _len,
+        )
         
         _hovertext = (
-            _df[COL_SUBSTAGE_DATE_START].dt.strftime("%H:%M:%S")
-            + pd.Series([" to "] * _len)
-            + _df[COL_SUBSTAGE_DATE_END].dt.strftime("%H:%M:%S")
-            + pd.Series([" ("] * _len)
-            + _df[COL_SUBSTAGE_DURATION].map("{:.0f}".format)
-            + pd.Series([" sec)"] * _len)
+            _hovertext_date_range
             + pd.Series(["<br>"] * _len)
             + pd.Series(["<b>"] * _len)
             + pd.Series(_y.apply(lambda _: _ * 100).map("{:.1f}".format))
@@ -210,40 +235,108 @@ def assign_y_to_stages(
     return y
 
 
+def format_duration_sec(
+    size: float,
+) -> str:
+    size = float(size)
+    size_ms = size * 1000
+    
+    format_float_decimals = 1
+    
+    conversions = [
+        1000,
+        60,
+        60,
+        24,
+    ]
+    
+    n = 0
+    
+    power_labels = {
+        _index: _str
+        for _index, _str in enumerate(
+            [
+                "ms",
+                "sec",
+                "min",
+                "hours",
+                "days",
+            ]
+        )
+    }
+    
+    while n <= len(conversions) - 1:
+        conversion = conversions[n]
+        
+        if size_ms < conversion:
+            break
+            
+        else:
+            size_ms /= conversion
+            n += 1
+            
+            if n > len(conversions) - 1:
+                break
+    
+    size_rounded = round(size_ms, format_float_decimals)
+    size_decimals = size_rounded - floor(size_rounded)
+    
+    if n <= 1 or size_decimals == 0:
+        size_str = str(
+            int(round(size_rounded))
+        )
+        
+    else:
+        size_str = (
+            (
+                r"{:." + str(format_float_decimals) + r"f}"
+            )
+            .format(size_rounded)
+        )
+    
+    return (
+        size_str
+        + " "
+        + power_labels[n]
+    )
+
+
 def format_bytes(
     size: float,
 ) -> str:
+    size = float(size)
+    
     format_float_decimals = 1
     
     power = 2**10
     n = 0
     
     power_labels = {
-        0: '',
-        1: 'K',
-        2: 'M',
-        3: 'G',
-        4: 'T',
+        0: "",
+        1: "K",
+        2: "M",
+        3: "G",
+        4: "T",
     }
     
-    while size > power:
+    while n <= len(power_labels) - 1:
         size /= power
         n += 1
+
+        if size <= power or n > len(power_labels) - 1:
+            break
     
-    n = min(
-        n,
-        len(power_labels) - 1,
+    size_str = (
+        (
+            r"{:." + str(format_float_decimals) + r"f}"
+        )
+        .format(size)
     )
     
     return (
-        (
-            (
-                r"{:." + str(format_float_decimals) + r"f}"
-            )
-            .format(size)
-        )
+        size_str
         + " "
-        + power_labels[n] + 'B'
+        + power_labels[n] + "B"
     )
 
 
@@ -312,13 +405,11 @@ def _create_trace_spill(
     
     if not is_trace_hidden:
         
-        _hovertext_date_range = (
-            _start.dt.strftime("%H:%M:%S")
-            + pd.Series([" to "] * _len)
-            + _end.dt.strftime("%H:%M:%S")
-            + pd.Series([" ("] * _len)
-            + _duration.map("{:.0f}".format)
-            + pd.Series([" sec)"] * _len)
+        _hovertext_date_range = create_hovertext_date_range(
+            _start,
+            _end,
+            _duration,
+            _len,
         )
         
         _hovertext_stage_all = (
@@ -475,17 +566,19 @@ def create_chart_stages(
         _end = pd.to_datetime(df[COL_SUBSTAGE_DATE_END], format=GANTT_XAXIS_DATETIME_FORMAT)
         _duration = (_end - _start).astype("timedelta64[s]")
         
+        _hovertext_date_range = create_hovertext_date_range(
+            _start,
+            _end,
+            _duration,
+            _len,
+        )
+        
         _hovertext = (
             pd.Series(["Stage: <b>"] * _len)
             + df["y_labels"]
             + pd.Series(["</b>"] * _len)
             + pd.Series(["<br>"] * _len)
-            + _start.dt.strftime("%H:%M:%S")
-            + pd.Series([" to "] * _len)
-            + _end.dt.strftime("%H:%M:%S")
-            + pd.Series([" ("] * _len)
-            + _duration.map("{:.0f}".format)
-            + pd.Series([" sec)"] * _len)
+            + _hovertext_date_range
         )
     
         timeline_stages_fig.update_traces(
