@@ -39,8 +39,6 @@ def create_hovertext_date_range(
 
 def create_chart_efficiency(
     df: pd.DataFrame,
-    fig: Figure,
-    cpus_available: int,
 ):
     id_vars = [
         COL_SUBSTAGE_DATE_START,
@@ -129,23 +127,8 @@ def create_chart_efficiency(
                 marker_color=metrics_map_color[_metric],
             ),
         )
-        
-    fig.add_traces(
-        _traces,
-        rows=1,
-        cols=1,
-    )
     
-    fig.update_layout(
-        barmode="stack",
-    )
-
-    fig.update_yaxes(
-        title_text=f"CPU cores available for tasks: {cpus_available}",
-        title_font_size=18,
-        row=1,
-        col=1,
-    )
+    return _traces
 
 
 def assign_y_to_stages(
@@ -528,86 +511,75 @@ def create_chart_spill(
 
 def create_chart_stages(
     df: pd.DataFrame,
-    fig,
     col_y: str,
-    row: int,
     px_timeline_color_kwargs: dict = None,
 ):
     px_timeline_color_kwargs = px_timeline_color_kwargs or {}
     
     if df.empty:
-    
         raise NotImplementedError
     
-    else:
-        
-        # Plotly can"t handle ns
-        # plotly.express._core == 5.7.0, line 1681
-        # args["data_frame"][args["x_end"]] = (x_end - x_start).astype("timedelta64[ms]")
-        df.loc[:, COL_SUBSTAGE_DATE_START] = (
-            df[COL_SUBSTAGE_DATE_START].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
-        )
+    # Plotly can"t handle ns
+    # plotly.express._core == 5.7.0, line 1681
+    # args["data_frame"][args["x_end"]] = (x_end - x_start).astype("timedelta64[ms]")
+    df.loc[:, COL_SUBSTAGE_DATE_START] = (
+        df[COL_SUBSTAGE_DATE_START].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+    )
+
+    df.loc[:, COL_SUBSTAGE_DATE_END] = (
+        df[COL_SUBSTAGE_DATE_END].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
+    )
+
+    timeline_stages_fig = px.timeline(
+        data_frame=df,
+        x_start=COL_SUBSTAGE_DATE_START,
+        x_end=COL_SUBSTAGE_DATE_END,
+        y=col_y,
+        text="y_labels",
+        **px_timeline_color_kwargs,
+    )
     
-        df.loc[:, COL_SUBSTAGE_DATE_END] = (
-            df[COL_SUBSTAGE_DATE_END].dt.strftime(GANTT_XAXIS_DATETIME_FORMAT)
-        )
+    _len = len(df)
+    _start = pd.to_datetime(df[COL_SUBSTAGE_DATE_START], format=GANTT_XAXIS_DATETIME_FORMAT)
+    _end = pd.to_datetime(df[COL_SUBSTAGE_DATE_END], format=GANTT_XAXIS_DATETIME_FORMAT)
+    _duration = (_end - _start).astype("timedelta64[s]")
     
-        timeline_stages_fig = px.timeline(
-            data_frame=df,
-            x_start=COL_SUBSTAGE_DATE_START,
-            x_end=COL_SUBSTAGE_DATE_END,
-            y=col_y,
-            text="y_labels",
-            **px_timeline_color_kwargs,
-        )
-        
-        _len = len(df)
-        _start = pd.to_datetime(df[COL_SUBSTAGE_DATE_START], format=GANTT_XAXIS_DATETIME_FORMAT)
-        _end = pd.to_datetime(df[COL_SUBSTAGE_DATE_END], format=GANTT_XAXIS_DATETIME_FORMAT)
-        _duration = (_end - _start).astype("timedelta64[s]")
-        
-        _hovertext_date_range = create_hovertext_date_range(
-            _start,
-            _end,
-            _duration,
-            _len,
-        )
-        
-        _hovertext = (
-            pd.Series(["Stage: <b>"] * _len)
-            + df["y_labels"]
-            + pd.Series(["</b>"] * _len)
-            + pd.Series(["<br>"] * _len)
-            + _hovertext_date_range
-        )
+    _hovertext_date_range = create_hovertext_date_range(
+        _start,
+        _end,
+        _duration,
+        _len,
+    )
     
-        timeline_stages_fig.update_traces(
-            hovertext=_hovertext,
-            hovertemplate=(
-                "%{hovertext}"
-                "<extra></extra>"
-            ),
-            marker_line=dict(
-                width=1,
-                color="white",
-            ),
-            marker_color="black",
-            textposition="inside",
-            textangle=0,
-            insidetextanchor="middle",
-        )
+    _hovertext = (
+        pd.Series(["Stage: <b>"] * _len)
+        + df["y_labels"]
+        + pd.Series(["</b>"] * _len)
+        + pd.Series(["<br>"] * _len)
+        + _hovertext_date_range
+    )
+
+    timeline_stages_fig.update_traces(
+        hovertext=_hovertext,
+        hovertemplate=(
+            "%{hovertext}"
+            "<extra></extra>"
+        ),
+        marker_line=dict(
+            width=1,
+            color="white",
+        ),
+        marker_color="black",
+        textposition="inside",
+        textangle=0,
+        insidetextanchor="middle",
+    )
+
+    timeline_stages_trace = list(
+        timeline_stages_fig.select_traces()
+    )
+
+    assert len(timeline_stages_trace) == 1
+    timeline_stages_trace = timeline_stages_trace[0]
     
-        timeline_stages_trace = list(
-            timeline_stages_fig.select_traces()
-        )
-    
-        assert len(timeline_stages_trace) == 1
-        timeline_stages_trace = timeline_stages_trace[0]
-        
-        fig.add_trace(
-            timeline_stages_trace,
-            row=row,
-            col=1,
-        )
-    
-        fig.update_xaxes(type="date")
+    return timeline_stages_trace

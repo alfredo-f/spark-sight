@@ -281,10 +281,25 @@ def create_figure(
         ],
     )
     
-    create_chart_efficiency(
+    traces_chart_efficiency = create_chart_efficiency(
         df_fig_efficiency,
-        fig,
-        cpus_available=cpus_available,
+    )
+
+    fig.add_traces(
+        traces_chart_efficiency,
+        rows=1,
+        cols=1,
+    )
+
+    fig.update_layout(
+        barmode="stack",
+    )
+
+    fig.update_yaxes(
+        title_text=f"CPU cores available for tasks: {cpus_available}",
+        title_font_size=18,
+        row=1,
+        col=1,
     )
     
     stages_y = assign_y_to_stages(df_fig_timeline_stage)
@@ -333,13 +348,19 @@ def create_figure(
         app_info=app_info,
     )
 
-    create_chart_stages(
+    timeline_stages_trace = create_chart_stages(
         df_fig_timeline_stage,
-        fig,
         col_y="y",
-        row=3,
     )
-    
+
+    fig.add_trace(
+        timeline_stages_trace,
+        row=3,
+        col=1,
+    )
+
+    fig.update_xaxes(type="date")
+
     create_chart_memory(
         df_fig_memory,
         fig,
@@ -499,76 +520,95 @@ def create_df_fig_spill(
     return task_grouped
 
 
-def _main(
+def parse_and_extract(
     path_spark_event_log,
-    cpus: int,
-    deploy_mode: str = DEPLOY_MODE_CLUSTER,
 ):
+    # TODO exceptions to handle
     _log_root = "Parsing Spark event log"
     logging.info(f"{_log_root}...")
-
+    
     (
         lines_tasks,
         lines_stages,
     ) = parse_event_log(
         path_spark_event_log,
     )
-
+    
     logging.info(f"{_log_root}: done\n")
-
+    
     if len(lines_tasks) == 0 or len(lines_stages) == 0:
         logging.critical(
             compose_str_exception_file_invalid_content(
                 path_spark_event_log
             )
         )
-
+        
         return
-
+    
     try:
         stage_ids_completed = set(
             _["Stage Info"]["Stage ID"]
-            for _ in lines_stages
-            if _["Event"] == "SparkListenerStageCompleted"
+                for _ in lines_stages
+                if _["Event"] == "SparkListenerStageCompleted"
         )
         
         _log_root = "Extracting task information from Spark event log"
         logging.info(f"{_log_root}...")
-
+        
         task_info = extract_task_info(
             lines_tasks=lines_tasks,
         )
-
+        
         logging.info(f"{_log_root}: done\n")
-
+    
     except Exception:
         logging.critical(
             compose_str_exception_file_invalid_content(path_spark_event_log)
         )
-
+        
         return
+    
+    return (
+        lines_stages,
+        task_info,
+        stage_ids_completed,
+    )
 
+
+def create_dfs_for_figures(
+    path_spark_event_log,
+    cpus: int,
+    deploy_mode: str,
+):
+    (
+        lines_stages,
+        task_info,
+        stage_ids_completed,
+    ) = parse_and_extract(
+        path_spark_event_log,
+    )
+    
     print("LINE CHARTSSSSSSSSSSSSSSSSSSSSSSS")
-
+    
     _task_info = (
         task_info
-        .groupby(
+            .groupby(
             ["id_executor", "date_end__task"],
             as_index=False,
         )
-        .agg(
+            .agg(
             {
                 "memory_usage_storage": "max",
                 "memory_usage_execution": "max",
             }
         )
-        .sort_values("date_end__task").reset_index(drop=True)
+            .sort_values("date_end__task").reset_index(drop=True)
     )
     
     _lines = pd.DataFrame()
     _storage = _task_info[
         ["id_executor", "memory_usage_storage",
-        "date_end__task"]
+            "date_end__task"]
     ].rename(
         columns={
             "memory_usage_storage": "value",
@@ -576,7 +616,7 @@ def _main(
     )
     _execution = _task_info[
         ["id_executor", "memory_usage_execution",
-        "date_end__task"]
+            "date_end__task"]
     ].rename(
         columns={
             "memory_usage_execution": "value",
@@ -633,7 +673,7 @@ def _main(
     df_fig_spill.loc[:, COL_ID_EXECUTOR] = (
         df_fig_spill[COL_ID_EXECUTOR].astype(float)
     )
-
+    
     logging.info(f"{_log_root}: done\n")
     
     _log_root = "Creating chart of stage timeline"
@@ -644,7 +684,7 @@ def _main(
             lines_stages,
             stage_ids_completed,
         )
-        .rename(
+            .rename(
             columns={
                 COL_STAGE_DATE_START: COL_SUBSTAGE_DATE_START,
                 COL_STAGE_DATE_END: COL_SUBSTAGE_DATE_END,
@@ -653,6 +693,34 @@ def _main(
     )
     
     logging.info(f"{_log_root}: done\n")
+    
+    return (
+        task_info,
+        cpus_available,
+        df_fig_efficiency,
+        df_fig_timeline_stage,
+        df_fig_spill,
+        df_fig_memory,
+    )
+
+
+def _main(
+    path_spark_event_log,
+    cpus: int,
+    deploy_mode: str = DEPLOY_MODE_CLUSTER,
+):
+    (
+        task_info,
+        cpus_available,
+        df_fig_efficiency,
+        df_fig_timeline_stage,
+        df_fig_spill,
+        df_fig_memory,
+    ) = create_dfs_for_figures(
+        path_spark_event_log=path_spark_event_log,
+        cpus=cpus,
+        deploy_mode=deploy_mode,
+    )
     
     app_info = {
         **(
