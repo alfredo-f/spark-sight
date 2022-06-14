@@ -211,7 +211,7 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
     import plotly.graph_objects as go
     
     _fig = make_subplots(
-        rows=7,
+        rows=id_executor_max,
         shared_xaxes=True,
     )
     
@@ -228,10 +228,12 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
         
         _fig.add_trace(
             go.Scatter(
+                name=f"executor_{id_executor}_storage",
                 x=_storage["date_end__task"], y=_storage["value"],
                 mode='lines+markers',
                 marker=dict(color="red"),
                 line=dict(color='rgba(255, 0, 0, 0.2)'),
+                stackgroup='hello',
             ),
             row=id_executor,
             col=1,
@@ -239,10 +241,12 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
         
         _fig.add_trace(
             go.Scatter(
+                name=f"executor_{id_executor}_execution",
                 x=_execution["date_end__task"], y=_execution["value"],
                 mode='lines+markers',
                 marker=dict(color="blue"),
                 line=dict(color='rgba(0, 0, 255, 0.2)'),
+                stackgroup='hello',
             ),
             row=id_executor,
             col=1,
@@ -331,8 +335,8 @@ def create_figure(
 
         cmax = df_fig_spill["memory_spill_disk"].max()
         
-    id_executor_max = max(
-        app_info[COL_ID_EXECUTOR]
+    id_executor_max = int(
+        max(app_info[COL_ID_EXECUTOR])
     )
     
     # https://plotly.com/python/reference/layout/yaxis/#layout-yaxis-exponentformat
