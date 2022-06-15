@@ -116,6 +116,7 @@ def create_charts_dash(
 
 app = Dash(
     __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
 
 
@@ -182,35 +183,81 @@ if __name__ == '__main__':
         deploy_mode,
     )
     
-    app.layout = html.Div(
+    layout_charts = dbc.Col(
         [
+            dbc.Row(
+                [
+                    dcc.Graph(
+                        id='id-fig-efficiency',
+                        figure=fig_efficiency,
+                    ),
+                ],
+                style={"height": "50vh"},
+            ),
+            dbc.Row(
+                [
+                    dcc.Graph(
+                        id='id-fig-stages',
+                        figure=fig_stages,
+                    )
+                ],
+                style={"height": "50vh"},
+            ),
+        ],
+        width=4,
+    )
+    
+    layout_sidebar = dbc.Col(
+        [
+            dbc.Row(
+                [
+                    dcc.Graph(
+                        id='--1-id-fig-efficiency',
+                        figure=fig_efficiency,
+                    ),
+                ],
+                style={"height": "50vh"},
+            ),
+            dbc.Row(
+                [
+                    dcc.Graph(
+                        id='--1-id-fig-stages',
+                        figure=fig_stages,
+                    )
+                ],
+                style={"height": "50vh"},
+            )
+        ],
+        width=8,
+    )
+    
+    app.layout = html.Div(
+        children=[
             html.Pre(
                 id='relayout-data',
                 style={"display": "none"},
             ),
-            dbc.Col(
-                [
+            dbc.Container(
+                children=[
                     dbc.Row(
                         [
-                            dcc.Graph(
-                                id='id-fig-efficiency',
-                                figure=fig_efficiency,
-                                style={"height": "50vh"},
-                            ),
+                            layout_charts,
+                            layout_sidebar,
                         ],
+                        style={"height": "100vh"},
                     ),
-                    dbc.Row(
-                        [
-                            dcc.Graph(
-                                id='id-fig-stages',
-                                figure=fig_stages,
-                                style={"height": "50vh"},
-                            )
-                        ],
-                    )
                 ],
+                fluid=True,
+                style={
+                    "height": "100vh",
+                    "width": "100vw",
+                },
             ),
         ],
-        style={"height": "100vh"},
+        style={
+            "height": "100vh",
+            "width": "100vw",
+        },
     )
+    
     app.run_server(debug=False)
