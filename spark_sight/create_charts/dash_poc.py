@@ -186,7 +186,7 @@ if __name__ == '__main__':
     layout_charts = dbc.Col(
         [
             dbc.Row(
-                [
+                children=[
                     dcc.Graph(
                         id='id-fig-efficiency',
                         figure=fig_efficiency,
@@ -195,7 +195,7 @@ if __name__ == '__main__':
                 style={"height": "50vh"},
             ),
             dbc.Row(
-                [
+                children=[
                     dcc.Graph(
                         id='id-fig-stages',
                         figure=fig_stages,
@@ -204,31 +204,36 @@ if __name__ == '__main__':
                 style={"height": "50vh"},
             ),
         ],
-        width=4,
+        width=8,
     )
     
     layout_sidebar = dbc.Col(
         [
             dbc.Row(
-                [
-                    dcc.Graph(
-                        id='--1-id-fig-efficiency',
-                        figure=fig_efficiency,
+                children=[
+                    dcc.Upload(
+                        id='upload-data',
+                        children=html.Div(
+                            [
+                                'Select Spark event log',
+                            ],
+                        ),
+                        style={
+                            'width': '100%',
+                            'height': '60px',
+                            'lineHeight': '60px',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                            'margin': '10px',
+                        },
+                        multiple=False,
                     ),
                 ],
-                style={"height": "50vh"},
             ),
-            dbc.Row(
-                [
-                    dcc.Graph(
-                        id='--1-id-fig-stages',
-                        figure=fig_stages,
-                    )
-                ],
-                style={"height": "50vh"},
-            )
         ],
-        width=8,
+        width=4,
     )
     
     app.layout = html.Div(
