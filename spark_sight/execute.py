@@ -1,5 +1,5 @@
+import plotly.graph_objects as go
 import pandas as pd
-from plotly.graph_objs import Figure
 
 import argparse
 import json
@@ -207,8 +207,8 @@ def update_layout(
         )
 
 
-def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
-    import plotly.graph_objects as go
+def create_chart_memory(df_fig_memory, id_executor_max: int):
+    marker_size = 2
     
     _fig = make_subplots(
         rows=id_executor_max,
@@ -231,7 +231,10 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
                 name=f"executor_{id_executor}_storage",
                 x=_storage["date_end__task"], y=_storage["value"],
                 mode='lines+markers',
-                marker=dict(color="red"),
+                marker=dict(
+                    size=marker_size,
+                    color="red",
+                ),
                 line=dict(color='rgba(255, 0, 0, 0.2)'),
                 stackgroup='hello',
             ),
@@ -244,7 +247,10 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
                 name=f"executor_{id_executor}_execution",
                 x=_execution["date_end__task"], y=_execution["value"],
                 mode='lines+markers',
-                marker=dict(color="blue"),
+                marker=dict(
+                    size=marker_size,
+                    color="blue",
+                ),
                 line=dict(color='rgba(0, 0, 255, 0.2)'),
                 stackgroup='hello',
             ),
@@ -252,7 +258,9 @@ def create_chart_memory(df_fig_memory, fig, id_executor_max: int):
             col=1,
         )
         
-    _fig.show()
+    # _fig.show()
+    
+    return _fig
 
 
 def create_figure(
@@ -367,7 +375,6 @@ def create_figure(
 
     create_chart_memory(
         df_fig_memory,
-        fig,
         id_executor_max=id_executor_max,
     )
     

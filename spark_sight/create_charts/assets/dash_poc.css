@@ -2,3 +2,11 @@
   margin: 0;
   padding: 0;
 }
+/* Hide scrollbar */
+#id-fig-memory-row {
+    -ms-overflow-style: none; /* for Internet Explorer, Edge */
+    scrollbar-width: none; /* for Firefox */
+}
+#id-fig-memory-row::-webkit-scrollbar {
+    display: none; /* for Chrome, Safari, and Opera */
+}
