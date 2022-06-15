@@ -438,9 +438,7 @@ def _create_trace_spill(
 
 def create_chart_spill(
     df: pd.DataFrame,
-    fig,
     col_y: str,
-    row: int,
     px_timeline_color_kwargs: dict = None,
     app_info: dict = None,
 ):
@@ -449,6 +447,8 @@ def create_chart_spill(
     df = df[
         df["memory_spill_disk"] > 0
     ].copy().reset_index(drop=True)
+
+    trace_not_empty = None
     
     if not df.empty:
         trace_not_empty = _create_trace_spill(
@@ -457,33 +457,26 @@ def create_chart_spill(
             px_timeline_color_kwargs,
         )
 
-        fig.add_trace(
-            trace_not_empty,
-            row=row,
-            col=1,
-        )
-    
     executors_all = set(app_info[COL_ID_EXECUTOR])
+    
+    _start = pd.to_datetime(app_info[COL_SUBSTAGE_DATE_START])
+    _end = pd.to_datetime(app_info[COL_SUBSTAGE_DATE_END])
     
     df_empty = (
         pd.DataFrame(
             [
                 {
                     COL_ID_EXECUTOR: _id_executor,
-                    COL_SUBSTAGE_DATE_START: app_info[COL_SUBSTAGE_DATE_START],
-                    COL_SUBSTAGE_DATE_END: app_info[COL_SUBSTAGE_DATE_START],
+                    COL_SUBSTAGE_DATE_START: _start,
+                    COL_SUBSTAGE_DATE_END: _start,
                 }
                 for _id_executor in executors_all
             ]
             + [
                 {
                     COL_ID_EXECUTOR: _id_executor,
-                    COL_SUBSTAGE_DATE_START: (
-                        app_info[COL_SUBSTAGE_DATE_END]
-                    ),
-                    COL_SUBSTAGE_DATE_END: (
-                        app_info[COL_SUBSTAGE_DATE_END]
-                    ),
+                    COL_SUBSTAGE_DATE_START: _end,
+                    COL_SUBSTAGE_DATE_END: _end,
                 }
                 for _id_executor in executors_all
             ]
@@ -500,14 +493,11 @@ def create_chart_spill(
         is_trace_hidden=True,
     )
     
-    fig.add_trace(
+    return (
+        trace_not_empty,
         trace_empty,
-        row=row,
-        col=1,
     )
-
-    fig.update_xaxes(type="date")
-
+    
 
 def create_chart_stages(
     df: pd.DataFrame,

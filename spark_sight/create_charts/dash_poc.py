@@ -1,15 +1,19 @@
+import re
 import json
 import pickle
 from pathlib import Path
 from typing import List
 
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dcc, Output, Input, State
+from dash import Dash, html, dcc, Output, Input, State, ctx
 from plotly.graph_objs import Figure
 
 from spark_sight.create_charts.parsing_spark_history_server import \
     (
-    create_chart_efficiency, create_chart_stages, assign_y_to_stages,
+    create_chart_efficiency,
+    create_chart_stages,
+    assign_y_to_stages,
+    create_chart_spill,
 )
 from spark_sight.data_references import (
     COL_ID_STAGE,
@@ -23,10 +27,6 @@ from spark_sight.execute import (
     create_chart_memory,
 )
 from tests import ROOT_TESTS
-
-
-# Run this app with `python app.py` and
-# visit http://127.0.0.1:8050/ in your web browser.
 
 
 def create_charts_dash(
@@ -114,11 +114,109 @@ def create_charts_dash(
                 .to_dict(orient="records")[0]
         ),
     }
-
+    
     id_executor_max = int(
         max(app_info[COL_ID_EXECUTOR])
     )
 
+    fig_spill = Figure()
+
+    df_fig_spill_empty = df_fig_spill[
+        df_fig_spill["memory_spill_disk"] > 0
+    ].empty
+
+    cmin = 0
+
+    if df_fig_spill_empty:
+        cmax = 1_000_000
+
+    else:
+        df_fig_spill = df_fig_spill[
+            df_fig_spill["memory_spill_disk"] > 0
+        ].copy()
+    
+        cmax = df_fig_spill["memory_spill_disk"].max()
+
+    (
+        spill_trace_not_empty,
+        spill_trace_empty,
+    ) = create_chart_spill(
+        df_fig_spill,
+        col_y=COL_ID_EXECUTOR,
+        # Color is discarded because trace is extracted from plotly.express
+        px_timeline_color_kwargs=dict(
+            color="memory_spill_disk",
+        ),
+        app_info=app_info,
+    )
+    
+    if spill_trace_not_empty is not None:
+        fig_spill.add_trace(
+            spill_trace_not_empty,
+        )
+
+    fig_spill.add_trace(
+        spill_trace_empty,
+    )
+
+    update_coloraxes_kwargs = dict(
+        colorscale=[
+            "#e5ecf6",
+            "#b300ff",
+        ],
+        cmin=cmin,
+        cmax=cmax,
+        showscale=False,
+    )
+
+    fig_spill.update_coloraxes(
+        **update_coloraxes_kwargs
+    )
+
+    # TODO x in the center of period
+    if df_fig_spill_empty:
+        _data_0_x = fig_spill.data[0].x
+        
+        annotation_x = (
+            min(_data_0_x) + (
+            (
+                max(_data_0_x) - min(_data_0_x)
+            )
+            / 2
+        )
+        )
+    
+        annotation_y = (
+            id_executor_max / 2
+            + 0.5
+        )
+    
+        fig_spill.add_annotation(
+            text="No spill, congrats!",
+            xref="paper",
+            yref="paper",
+            x=annotation_x,
+            y=annotation_y,
+            font=dict(
+                size=18,
+            ),
+            showarrow=False,
+        )
+
+    _id_executor_max = id_executor_max + 1
+
+    _id_executor_range = range(1, _id_executor_max)
+    
+    fig_spill.update_yaxes(
+        tickmode='array',
+        tickvals=list(_id_executor_range),
+        ticktext=[
+            f"Executor {_id_executor}"
+            for _id_executor in _id_executor_range
+        ],
+        autorange="reversed",
+    )
+    
     fig_memory = create_chart_memory(
         df_fig_memory,
         id_executor_max=id_executor_max,
@@ -134,23 +232,25 @@ def create_charts_dash(
     fig_efficiency.update_xaxes(type="date")
 
     fig_memory.update_xaxes(type="date")
+    
+    fig_spill.update_xaxes(type="date")
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     fig_efficiency.update_layout(
-        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        margin=dict(l=_margin, r=_margin),
         showlegend=False,
     )
     
     fig_stages.update_layout(
-        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        margin=dict(l=_margin, r=_margin),
         showlegend=False,
     )
     
     # Scrollbar takes space
     fig_memory.update_layout(
-        margin=dict(l=_margin, r=_margin, t=40, b=5),
+        margin=dict(l=_margin, r=_margin),
         showlegend=False,
     )
 
@@ -175,6 +275,7 @@ def create_charts_dash(
         fig_efficiency,
         fig_stages,
         fig_memory,
+        fig_spill,
     )
 
 
@@ -184,208 +285,263 @@ app = Dash(
 )
 
 
-class Hello:
-    def __init__(
-        self,
-        list_output,
-        list_input,
-        list_state,
-        relayout_data,
-    ):
-        self.list_output = list_output
-        self.list_input = list_input
-        self.list_state = list_state
-        self.relayout_data = relayout_data
-
-    def _update_xaxis_as_per_relayout(
-        self,
-        input_relayout: dict,
-        state_fig: dict,
-    ):
-        if input_relayout is None:
-            return state_fig
-    
-        if (
-            'xaxis.range[0]' in input_relayout
-            and 'xaxis.range[1]' in input_relayout
-        ):
-            _range = [
-                input_relayout['xaxis.range[0]'],
-                input_relayout['xaxis.range[1]'],
-            ]
-        
-            for _xaxis in [
-                _key
-                for _key in state_fig['layout']
-                if _key.startswith("xaxis")
-            ]:
-                state_fig['layout'][_xaxis]["autorange"] = False
-                state_fig['layout'][_xaxis]["range"] = _range
-    
-        elif "xaxis.autorange" in input_relayout:
-            assert input_relayout["xaxis.autorange"] is True
-        
-            for _xaxis in [
-                _key
-                for _key in state_fig['layout']
-                if _key.startswith("xaxis")
-            ]:
-                state_fig['layout'][_xaxis]["autorange"] = (
-                    input_relayout["xaxis.autorange"]
-                )
-    
+def _update_xaxis_as_per_relayout(
+    input_relayout: dict,
+    state_fig: dict,
+    state_fig_name: str,
+):
+    if input_relayout is None:
         return state_fig
     
-    def create_method(self):
-        @app.callback(
-            self.list_output,
-            self.list_input,
-            self.list_state,
-        )
-        def update_xaxis_as_per_relayout(
-            input_relayout: dict,
-            *state_figs: dict,
-        ):
-            return [
-                self._update_xaxis_as_per_relayout(
-                    input_relayout,
-                    _fig,
-                )
-                for _fig in state_figs
-            ]
+    if (
+        'xaxis.range[0]' in input_relayout
+        and 'xaxis.range[1]' in input_relayout
+    ):
+        _range = [
+            input_relayout['xaxis.range[0]'],
+            input_relayout['xaxis.range[1]'],
+        ]
         
-        return update_xaxis_as_per_relayout
+        for _xaxis in [
+            _key
+            for _key in state_fig['layout']
+            if _key.startswith("xaxis")
+        ]:
+            state_fig['layout'][_xaxis]["autorange"] = False
+            state_fig['layout'][_xaxis]["range"] = _range
     
-    def create_method_2(self):
-        @app.callback(
-            self.relayout_data,
-            self.list_input,
-        )
-        def display_relayout_data(relayoutData):
-            return json.dumps(relayoutData, indent=2)
+    elif "xaxis.autorange" in input_relayout:
+        assert input_relayout["xaxis.autorange"] is True
         
-        return display_relayout_data
+        for _xaxis in [
+            _key
+            for _key in state_fig['layout']
+            if _key.startswith("xaxis")
+        ]:
+            state_fig['layout'][_xaxis]["autorange"] = (
+                input_relayout["xaxis.autorange"]
+            )
+            
+        for _yaxis in [
+            _key
+            for _key in state_fig['layout']
+            if _key.startswith("yaxis")
+        ]:
+            if state_fig_name == "id-fig-efficiency":
+                state_fig['layout'][_yaxis]["autorange"] = (
+                    False
+                )
+                state_fig['layout'][_yaxis]["range"] = [0, 1]
+                
+            else:
+                state_fig['layout'][_yaxis]["autorange"] = (
+                    True
+                )
+
+    return state_fig
 
 
 update_xaxis_list_fig = [
     "id-fig-efficiency",
     "id-fig-memory",
     "id-fig-stages",
+    "id-fig-spill",
 ]
 
 
-for _index, fig_input_dashes in enumerate(update_xaxis_list_fig):
-    fig_output = update_xaxis_list_fig.copy()
-    fig_output.remove(fig_input_dashes)
+list_output = [
+    Output(_fig, 'figure')
+    for _fig in update_xaxis_list_fig
+]
 
-    list_output = [
-        Output(_fig, 'figure')
-        for _fig in fig_output
-    ].copy()
+list_state = [
+    State(_fig, 'figure')
+    for _fig in update_xaxis_list_fig
+]
 
-    list_input = [
-        Input(fig_input_dashes, 'relayoutData'),
-    ].copy()
+list_input = [
+    Input(_fig, 'relayoutData')
+    for _fig in update_xaxis_list_fig
+]
 
-    list_state = [
-        State(_fig, 'figure')
-        for _fig in fig_output
-    ].copy()
+
+@app.callback(
+    list_output,
+    list_input,
+    list_state,
+)
+def display_relayout_data(
+    *args,
+):
+    # TODO prevent_initial_call attribute of Dash callbacks.
+    assert len(args) == len(list_input) + len(list_state)
     
-    fig_input = fig_input_dashes.replace("-", "_")
+    input_relayout_data = args[:len(list_input)]
+    state_figs = args[len(list_input):len(list_input) + len(list_state)]
     
-    globals()[f"update_xaxis__{_index}"] = Hello(
-        list_output=list_output,
-        list_input=list_input,
-        list_state=list_state,
-        relayout_data=Output(f'relayout-data-{_index}', 'children'),
-    ).create_method()
+    input_relayout_data_dedup = []
+    
+    xaxis_duplicate_regex = re.compile(r"xaxis\d+\.range\[([01])\]")
+    
+    button_id = ctx.triggered_id if not None else 'No clicks yet'
+    
+    input_relayout = (
+        None
+        if button_id is None
+        else input_relayout_data[update_xaxis_list_fig.index(button_id)]
+    )
 
-    globals()[f"relay__{_index}"] = Hello(
-        list_output=list_output,
-        list_input=list_input,
-        list_state=list_state,
-        relayout_data=Output(f'relayout-data-{_index}', 'children')
-    ).create_method_2()
+    if input_relayout is not None:
+        xaxis_duplicate = [
+            _key
+            for _key in input_relayout
+            if xaxis_duplicate_regex.match(_key)
+        ]
     
-    # TODO does not work with multiple
-    break
+        if len(xaxis_duplicate) == 0:
+            input_relayout_data_dedup.append(
+                input_relayout
+            )
+    
+        else:
+        
+            for _xaxis_duplicate in xaxis_duplicate:
+                start_or_end = xaxis_duplicate_regex.findall(_xaxis_duplicate)
+                assert len(start_or_end) == 1, start_or_end
+                start_or_end = start_or_end[0]
+            
+                if (
+                    input_relayout[_xaxis_duplicate]
+                    != input_relayout[f"xaxis.range[{start_or_end}]"]
+                ):
+                    raise ValueError(
+                        input_relayout[_xaxis_duplicate],
+                        input_relayout[f"xaxis.range[{start_or_end}]"],
+                    )
+            
+                else:
+                    input_relayout.pop(_xaxis_duplicate)
+
+    state_figs = [
+        _update_xaxis_as_per_relayout(
+            input_relayout,
+            _fig,
+            state_fig_name=update_xaxis_list_fig[state_figs.index(_fig)],
+        )
+        for _fig in state_figs
+    ]
+    
+    return state_figs
 
 
 if __name__ == '__main__':
     path_spark_event_log = (
-        Path(ROOT_TESTS)
-        / Path("test_e2e_spill_false")
+        # Path(ROOT_TESTS)
+        # / Path("test_e2e_spill_true")
+        r"C:\Users\a.fomitchenko\Downloads\spark-application-1655200731376.inprogress"
     )
-    cpus = 32
+    cpus = 20
     
     deploy_mode = DEPLOY_MODE_CLUSTER
-    #
-    # (
-    #     fig_efficiency,
-    #     fig_stages,
-    #     fig_memory,
-    # ) = create_charts_dash(
-    #     path_spark_event_log,
-    #     cpus,
-    #     deploy_mode,
-    # )
-    # pickle.dump(
-    #     fig_efficiency,
-    #     open(
-    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
-    #         "wb"
-    #     )
-    # )
-    # pickle.dump(
-    #     fig_stages,
-    #     open(
-    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
-    #         "wb"
-    #     )
-    # )
-    # pickle.dump(
-    #     fig_memory,
-    #     open(
-    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
-    #         "wb"
-    #     )
-    # )
 
     (
         fig_efficiency,
         fig_stages,
         fig_memory,
-    ) = (
-        pickle.load(
-            open(
-                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
-                "rb",
-            )
-        ),
-        pickle.load(
-            open(
-                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
-                "rb",
-            )
-        ),
-        pickle.load(
-            open(
-                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
-                "rb",
-            )
-        ),
+        fig_spill,
+    ) = create_charts_dash(
+        path_spark_event_log,
+        cpus,
+        deploy_mode,
     )
+    pickle.dump(
+        fig_efficiency,
+        open(
+            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
+            "wb"
+        )
+    )
+    pickle.dump(
+        fig_stages,
+        open(
+            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
+            "wb"
+        )
+    )
+    pickle.dump(
+        fig_memory,
+        open(
+            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
+            "wb"
+        )
+    )
+    pickle.dump(
+        fig_spill,
+        open(
+            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
+            "wb"
+        )
+    )
+
+    # (
+    #     fig_efficiency,
+    #     fig_stages,
+    #     fig_memory,
+    #     fig_spill,
+    # ) = (
+    #     pickle.load(
+    #         open(
+    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
+    #             "rb",
+    #         )
+    #     ),
+    #     pickle.load(
+    #         open(
+    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
+    #             "rb",
+    #         )
+    #     ),
+    #     pickle.load(
+    #         open(
+    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
+    #             "rb",
+    #         )
+    #     ),
+    #     pickle.load(
+    #         open(
+    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
+    #             "rb",
+    #         )
+    #     ),
+    # )
     
-    layout_charts_perc_efficiency = 50
+    layout_charts_perc_efficiency = 30
+    layout_charts_perc_spill = 25
     layout_charts_perc_memory = 25
-    layout_charts_perc_timeline = 25
+    layout_charts_perc_timeline = 20
+    
+    assert sum(
+        [
+            layout_charts_perc_efficiency,
+            layout_charts_perc_spill,
+            layout_charts_perc_memory,
+            layout_charts_perc_timeline,
+        ]
+    ) == 100
     
     layout_charts_perc = [
         layout_charts_perc_efficiency,
+        layout_charts_perc_spill,
         layout_charts_perc_memory,
         layout_charts_perc_timeline,
     ]
+    
+    margins_align_to_spill = {
+        "margin-right": "19px",
+        "margin-left": "19px",
+    }
+    
+    width_sidebar = 2
     
     layout_charts = dbc.Col(
         [
@@ -396,7 +552,19 @@ if __name__ == '__main__':
                         figure=fig_efficiency,
                     ),
                 ],
-                style={"height": f"{layout_charts_perc_efficiency}vh"},
+                style={
+                    "height": f"{layout_charts_perc_efficiency}vh",
+                    **margins_align_to_spill,
+                },
+            ),
+            dbc.Row(
+                children=[
+                    dcc.Graph(
+                        id='id-fig-spill',
+                        figure=fig_spill,
+                    ),
+                ],
+                style={"height": f"{layout_charts_perc_spill}vh"},
             ),
             dbc.Row(
                 id="id-fig-memory-row",
@@ -413,6 +581,7 @@ if __name__ == '__main__':
                 style={
                     "height": f"{layout_charts_perc_memory}vh",
                     "overflow-y": "scroll",
+                    **margins_align_to_spill,
                 },
             ),
             dbc.Row(
@@ -422,10 +591,13 @@ if __name__ == '__main__':
                         figure=fig_stages,
                     )
                 ],
-                style={"height": f"{layout_charts_perc_timeline}vh"},
+                style={
+                    "height": f"{layout_charts_perc_timeline}vh",
+                    **margins_align_to_spill,
+                },
             ),
         ],
-        width=8,
+        width=12 - width_sidebar,
     )
     
     layout_sidebar = dbc.Col(
@@ -436,7 +608,7 @@ if __name__ == '__main__':
                         id='upload-data',
                         children=html.Div(
                             [
-                                'Select Spark event log',
+                                'Select log',
                             ],
                         ),
                         style={
@@ -454,21 +626,23 @@ if __name__ == '__main__':
                 ],
             ),
         ],
-        width=4,
+        width=width_sidebar,
     )
     
     app.layout = html.Div(
         children=[
+            # html.Div(
+            #     className="output-example-loading",
+            #     id="id-loading",
+            #     style={
+            #         "position": "fixed",
+            #         "height": "100vh",
+            #         "width": "100vw",
+            #         "z-index": "1",
+            #     }
+            # ),
             html.Pre(
-                id='relayout-data-0',
-                style={"display": "none"},
-            ),
-            html.Pre(
-                id='relayout-data-1',
-                style={"display": "none"},
-            ),
-            html.Pre(
-                id='relayout-data-2',
+                id='relayout-data',
                 style={"display": "none"},
             ),
             dbc.Container(
@@ -478,7 +652,9 @@ if __name__ == '__main__':
                             layout_charts,
                             layout_sidebar,
                         ],
-                        style={"height": "100vh"},
+                        style={
+                            "height": "100vh",
+                        },
                     ),
                 ],
                 fluid=True,

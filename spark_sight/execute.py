@@ -208,7 +208,7 @@ def update_layout(
 
 
 def create_chart_memory(df_fig_memory, id_executor_max: int):
-    marker_size = 2
+    marker_size = 4
     
     _fig = make_subplots(
         rows=id_executor_max,
@@ -348,11 +348,12 @@ def create_figure(
     )
     
     # https://plotly.com/python/reference/layout/yaxis/#layout-yaxis-exponentformat
-    create_chart_spill(
+    (
+        spill_trace_not_empty,
+        spill_trace_empty,
+    ) = create_chart_spill(
         df_fig_spill,
-        fig,
         col_y=COL_ID_EXECUTOR,
-        row=2,
         # Color is discarded because trace is extracted from plotly.express
         px_timeline_color_kwargs=dict(
             color="memory_spill_disk",
@@ -360,6 +361,18 @@ def create_figure(
         app_info=app_info,
     )
 
+    fig.add_trace(
+        spill_trace_not_empty,
+        row=2,
+        col=1,
+    )
+    
+    fig.add_trace(
+        spill_trace_empty,
+        row=2,
+        col=1,
+    )
+    
     timeline_stages_trace = create_chart_stages(
         df_fig_timeline_stage,
         col_y="y",
@@ -684,6 +697,14 @@ def create_dfs_for_figures(
     df_fig_spill.loc[:, COL_ID_EXECUTOR] = (
         df_fig_spill[COL_ID_EXECUTOR].astype(float)
     )
+
+    df_fig_spill.loc[:, COL_SUBSTAGE_DATE_START] = (
+        pd.to_datetime(df_fig_spill[COL_SUBSTAGE_DATE_START])
+    )
+    
+    df_fig_spill.loc[:, COL_SUBSTAGE_DATE_END] = (
+        pd.to_datetime(df_fig_spill[COL_SUBSTAGE_DATE_END])
+    )
     
     logging.info(f"{_log_root}: done\n")
     
@@ -702,7 +723,7 @@ def create_dfs_for_figures(
             }
         )
     )
-    
+
     logging.info(f"{_log_root}: done\n")
     
     return (
