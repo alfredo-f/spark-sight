@@ -20,7 +20,7 @@ from spark_sight.create_charts.parsing_spark_history_server import (
     create_chart_spill,
 )
 from spark_sight.data_references import (
-    COL_ID_EXECUTOR,
+    COL_ID_EXECUTOR, COL_TASK_DATE_END,
 )
 from spark_sight.data_references import (
     COL_ID_STAGE,
@@ -207,7 +207,11 @@ def update_layout(
         )
 
 
-def create_chart_memory(df_fig_memory, id_executor_max: int):
+def create_chart_memory(
+    df_fig_memory,
+    id_executor_max: int,
+    simplified: bool = True,
+):
     marker_size = 4
     
     _fig = make_subplots(
@@ -599,6 +603,59 @@ def parse_and_extract(
     )
 
 
+def _drop_consecutive(
+    _df: pd.DataFrame,
+) -> pd.DataFrame:
+    _df = _df.sort_values(
+        [
+            COL_ID_EXECUTOR,
+            COL_TASK_DATE_END,
+        ],
+        
+    ).reset_index(drop=True)
+
+    _df.loc[:, "consec_value_equal_first"] = (
+        (_df[COL_ID_EXECUTOR].shift() == _df[COL_ID_EXECUTOR])
+        & (_df["value"].shift() == _df["value"])
+    )
+
+    _df.loc[:, "consec_value_equal_last"] = (
+        (_df[COL_ID_EXECUTOR] == _df[COL_ID_EXECUTOR].shift(-1))
+        & (_df["value"] == _df["value"].shift(-1))
+    )
+
+    _df.loc[:, "consec_executor_first"] = (
+        _df[COL_ID_EXECUTOR].shift() != _df[COL_ID_EXECUTOR]
+    )
+
+    _df.loc[:, "consec_executor_last"] = (
+        _df[COL_ID_EXECUTOR] != _df[COL_ID_EXECUTOR].shift(-1)
+    )
+
+    _df = (
+        _df[
+            (
+                ~_df["consec_value_equal_first"]
+                | ~_df["consec_value_equal_last"]
+            )
+            | _df["consec_executor_first"]
+            | _df["consec_executor_last"]
+        ]
+        .reset_index(drop=True)
+    )
+    
+    _df = _df.drop(
+        columns=[
+            "consec_value_equal_first",
+            "consec_value_equal_last",
+            "consec_executor_first",
+            "consec_executor_last",
+        ],
+    )
+
+    return _df
+
+
 def create_dfs_for_figures(
     path_spark_event_log,
     cpus: int,
@@ -646,6 +703,13 @@ def create_dfs_for_figures(
             "memory_usage_execution": "value",
         }
     )
+    
+    df_fig_memory_simplified = True
+    if df_fig_memory_simplified:
+        
+        _storage = _drop_consecutive(_storage)
+        _execution = _drop_consecutive(_execution)
+        
     _storage.loc[:, "memory_type"] = "storage"
     _execution.loc[:, "memory_type"] = "execution"
     
@@ -653,8 +717,11 @@ def create_dfs_for_figures(
         [
             _storage,
             _execution,
-        ]
+        ],
+        ignore_index=True,
     )
+    
+    # TODO reset index
     
     _log_root = "Computing CPU cores available for tasks"
     logging.info(f"{_log_root}...")
