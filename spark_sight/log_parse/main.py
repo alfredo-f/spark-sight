@@ -138,7 +138,23 @@ def convert_line_to_metrics(
             task["Task Info"]["Finish Time"]
         )
     )
-    
+
+    try:
+        _memory_usage_execution = float(
+            task['Task Executor Metrics']["OnHeapExecutionMemory"]
+        )
+
+    except KeyError:
+        _memory_usage_execution = None
+
+    try:
+        _memory_usage_storage = float(
+            task['Task Executor Metrics']["OnHeapStorageMemory"]
+        )
+
+    except KeyError:
+        _memory_usage_storage = None
+        
     _dict_base = {
         "id_task": task["Task Info"]["Task ID"],
         "id_stage": task["Stage ID"],
@@ -181,12 +197,8 @@ def convert_line_to_metrics(
         "memory_spill_disk": float(
             task["Task Metrics"]["Disk Bytes Spilled"]
         ),
-        "memory_usage_execution": float(
-            task['Task Executor Metrics']["OnHeapExecutionMemory"]
-        ),
-        "memory_usage_storage": float(
-            task['Task Executor Metrics']["OnHeapStorageMemory"]
-        ),
+        "memory_usage_execution": _memory_usage_execution,
+        "memory_usage_storage": _memory_usage_storage,
     }
     
     return _dict_base

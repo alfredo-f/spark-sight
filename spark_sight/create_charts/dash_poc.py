@@ -438,9 +438,9 @@ if __name__ == '__main__':
     path_spark_event_log = (
         # Path(ROOT_TESTS)
         # / Path("test_e2e_spill_true")
-        r"C:\Users\a.fomitchenko\Downloads\spark-application-1655200731376.inprogress"
+        r"C:\Users\a.fomitchenko\Downloads\spark-application-1655295162082.inprogress"
     )
-    cpus = 20
+    cpus = 60
     
     deploy_mode = DEPLOY_MODE_CLUSTER
 
