@@ -364,12 +364,13 @@ def create_figure(
         ),
         app_info=app_info,
     )
-
-    fig.add_trace(
-        spill_trace_not_empty,
-        row=2,
-        col=1,
-    )
+    
+    if spill_trace_not_empty is not None:
+        fig.add_trace(
+            spill_trace_not_empty,
+            row=2,
+            col=1,
+        )
     
     fig.add_trace(
         spill_trace_empty,

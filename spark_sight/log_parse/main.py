@@ -1,5 +1,7 @@
 import logging
+from functools import partial
 from typing import List, Set, Union
+from multiprocessing import Pool, cpu_count
 
 import pandas as pd
 
@@ -8,6 +10,98 @@ from spark_sight.data_references import (
     COL_TASK_DATE_END,
 )
 
+
+def _extract_task_info(
+    stage_id: int,
+    lines_tasks: List[dict],
+):
+    df = pd.DataFrame()
+    
+    logging.debug(f"Stage {stage_id}")
+    
+    tasks = extract_events_tasks(lines_tasks, stage_id=stage_id)
+    
+    for task in tasks:
+        _task_info_dict = convert_line_to_metrics(task)
+        
+        _task_info_df = pd.json_normalize(
+            _task_info_dict,
+            sep="_",
+        )
+        
+        _task_info_df = _task_info_df.rename(
+            columns={
+                "date_start": COL_TASK_DATE_START,
+                "date_end": COL_TASK_DATE_END,
+            }
+        )
+        
+        df = pd.concat(
+            [
+                df,
+                _task_info_df,
+            ],
+            ignore_index=True,
+        )
+    
+    return df
+
+
+def extract_task_info_2(
+    lines_tasks: List[dict],
+    stage_ids: Union[List[int], Set[int]],
+) -> pd.DataFrame:
+    """Extract task information from Spark log lines.
+
+    Parameters
+    ----------
+    lines_tasks : list of dict
+        Lines of the Spark log.
+    stage_ids : iterable of int
+        Stage ids to filter for.
+
+    Returns
+    -------
+    pd.DataFrame
+        Pandas DataFrame containing task information.
+        It contains the following columns:
+
+        * id_task: int
+        * id_stage: int
+        * date_start__task: start date of the task
+        * date_end__task: end date of the task
+        * duration_cpu_usage: duration of actual work. Measured in ns
+        * duration_cpu_overhead_serde: duration of overhead (de)serialization. Measured in ns
+        * duration_cpu_overhead_shuffle: duration of overhead shuffle (reading and writing). Measured in ns
+
+    """
+    _log_root = "Extracting task information from Spark event log"
+    
+    try:
+        pool_number_max = cpu_count()
+    except NotImplementedError:
+        pool_number_max = 8
+    
+    pool_number = min(
+        len(stage_ids),
+        pool_number_max,
+    )
+
+    with Pool(pool_number) as p:
+        return pd.concat(
+            (
+            
+            p.map(
+                partial(
+        _extract_task_info,
+                    lines_tasks=lines_tasks,
+                ) ,
+                stage_ids,
+            )
+            ),
+            ignore_index=True,
+        )
+    
 
 def extract_task_info(
     lines_tasks: List[dict],
@@ -34,6 +128,33 @@ def extract_task_info(
         * duration_cpu_overhead_shuffle: duration of overhead shuffle (reading and writing). Measured in ns
 
     """
+    is_multiprocessing = True
+    
+    if is_multiprocessing:
+        pool_number = min(
+            len(stage_ids),
+            8,
+        )
+    
+        with Pool(pool_number) as p:
+            return pd.concat(
+                (
+                
+                    p.map(
+                        partial(
+                            _extract_task_info,
+                            lines_tasks=lines_tasks,
+                        ),
+                        stage_ids,
+                    )
+                ),
+                ignore_index=True,
+            ).reset_index(drop=True)
+        
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    
     _log_root = "Extracting task information from Spark event log"
     _file_lines = len(lines_tasks)
     _perc_log_dict = [0.25, 0.5, 0.75]
