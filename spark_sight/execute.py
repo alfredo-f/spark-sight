@@ -480,17 +480,11 @@ def _main(
             if _["Event"] == "SparkListenerStageCompleted"
         )
         
-        stage_ids_all = set(
-            _["Stage ID"]
-            for _ in lines_tasks
-        )
-
         _log_root = "Extracting task information from Spark event log"
         logging.info(f"{_log_root}...")
         
         task_info = extract_task_info(
             lines_tasks=lines_tasks,
-            stage_ids=stage_ids_all,
         )
         
         logging.info(f"{_log_root}: done\n")

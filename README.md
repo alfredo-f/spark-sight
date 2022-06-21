@@ -1,5 +1,12 @@
 # spark-sight: Spark performance at a glance
 
+[![GitHub](https://img.shields.io/github/license/alfredo-f/spark-sight.svg?color=dark-green)](https://github.com/alfredo-f/spark-sight/blob/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/dash.svg?color=dark-green)](https://pypi.org/project/dash/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/dash.svg?color=dark-green)](https://pypi.org/project/dash/)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/y/alfredo-f/spark-sight.svg?color=dark-green)](https://github.com/alfredo-f/spark-sight/graphs/contributors)
+
+#### *spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance*.
+
 <br/>
 
 [<img src="images/intro.gif">](https://medium.com/@alfredo.fomitchenko/spark-sight-spark-performance-at-a-glance-c2316d2a251b)

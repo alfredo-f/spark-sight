@@ -11,7 +11,6 @@ from spark_sight.data_references import (
 
 def extract_task_info(
     lines_tasks: List[dict],
-    stage_ids: Union[List[int], Set[int]],
 ) -> pd.DataFrame:
     """Extract task information from Spark log lines.
     
@@ -19,8 +18,6 @@ def extract_task_info(
     ----------
     lines_tasks : list of dict
         Lines of the Spark log.
-    stage_ids : iterable of int
-        Stage ids to filter for.
 
     Returns
     -------
@@ -38,45 +35,18 @@ def extract_task_info(
 
     """
     _log_root = "Extracting task information from Spark event log"
-
+    _file_lines = len(lines_tasks)
     _perc_log_dict = [0.25, 0.5, 0.75]
     _perc_log_index = 0
-    _perc_log_len = len(stage_ids)
 
-    df = None
+    _task_info_df_data = []
     
-    for stage_id_index, stage_id in enumerate(stage_ids):
-        logging.debug(f"Stage {stage_id}")
+    for _line_index, task in enumerate(lines_tasks):
+        _task_info_dict = convert_line_to_metrics(task)
         
-        tasks = extract_events_tasks(lines_tasks, stage_id=stage_id)
+        _task_info_df_data.append(_task_info_dict)
         
-        for task in tasks:
-            _task_info_dict = convert_line_to_metrics(task)
-            
-            _task_info_df = pd.json_normalize(
-                _task_info_dict,
-                sep="_",
-            )
-            
-            _task_info_df = _task_info_df.rename(
-                columns={
-                    "date_start": COL_TASK_DATE_START,
-                    "date_end": COL_TASK_DATE_END,
-                }
-            )
-            
-            if df is None:
-                df = _task_info_df
-            else:
-                df = pd.concat(
-                    [
-                        df,
-                        _task_info_df,
-                    ],
-                    ignore_index=True,
-                )
-        
-        _perc = float(stage_id_index) / _perc_log_len
+        _perc = float(_line_index) / _file_lines
         if (
             _perc_log_index in range(len(_perc_log_dict))
             and _perc > _perc_log_dict[_perc_log_index]
@@ -86,40 +56,17 @@ def extract_task_info(
                 f"{_perc_log_dict[_perc_log_index] * 100:.0f}%"
             )
             _perc_log_index += 1
-        
+
+    df = pd.DataFrame(_task_info_df_data)
+    
+    df = df.rename(
+        columns={
+            "date_start": COL_TASK_DATE_START,
+            "date_end": COL_TASK_DATE_END,
+        }
+    )
+    
     return df
-
-
-def extract_events_tasks(
-    lines: List[dict],
-    stage_id: int,
-) -> List[dict]:
-    """Extract information related to the stage.
-    
-    Extracts events `SparkListenerTaskEnd` for the stage
-    
-    Parameters
-    ----------
-    lines : list of dict
-        Lines of the Spark log.
-    stage_id : int
-        Stage id.
-
-    Returns
-    -------
-    list
-        List of task events.
-
-    """
-    tasks = [
-        _ for _ in lines
-        if (
-            _["Event"] == "SparkListenerTaskEnd"
-            and _["Stage ID"] == stage_id
-        )
-    ]
-    
-    return tasks
 
 
 def extract_event_stage(
@@ -178,77 +125,62 @@ def convert_line_to_metrics(
     # "Task Metrics" > "Executor CPU Time" does not include time of deserialization,
     # see notes_1.png
 
+    _date_start = (
+        pd.to_datetime(
+            1e6 *
+            task["Task Info"]["Launch Time"]
+        )
+    )
+
+    _date_end = (
+        pd.to_datetime(
+            1e6 *
+            task["Task Info"]["Finish Time"]
+        )
+    )
+    
     _dict_base = {
-        "id": {
-            "task": task["Task Info"]["Task ID"],
-            "stage": task["Stage ID"],
-            "executor": int(task["Task Info"]["Executor ID"]),
-        },
-        "date": {
-            "start": task["Task Info"]["Launch Time"],
-            "end": task["Task Info"]["Finish Time"],
-        },
-        "duration": {
-            "cpu": {
-                "usage":
-                    # Notice this duration is different from the green bar
-                    # in the Spark UI. The green bar indicates the duration
-                    # of the task being scheduled onto the executor,
-                    # not the actual execution on the CPU
-                    float(task["Task Metrics"]["Executor CPU Time"]),
-                "overhead": {
-                    "serde":
-                        float(
-                            task["Task Metrics"][
-                                "Executor Deserialize CPU Time"]
-                            # / 1e9
-                        )
-                        + (
-                            float(task["Task Metrics"][
-                                "Result Serialization Time"]
-                            ) * float(1e6)
-                        ),
-                    "shuffle": (
-                        # "read":
-                        float(
-                            task["Task Metrics"]["Shuffle Read Metrics"][
-                                "Fetch Wait Time"]
-                            # / 1e3
-                        )
-                        # "write":
-                        + float(
-                            task["Task Metrics"]["Shuffle Write Metrics"][
-                                "Shuffle Write Time"]
-                            # / 1e3
-                        )
-                    )
-                }
-            }
-        },
-        "memory": {
-            "spill": {
-                "disk": float(
-                    task["Task Metrics"]["Disk Bytes Spilled"]
-                ),
-                # "memory": float(
-                #     task["Task Metrics"]["Memory Bytes Spilled"]
-                # ),
-            }
-        },
+        "id_task": task["Task Info"]["Task ID"],
+        "id_stage": task["Stage ID"],
+        "id_executor": int(task["Task Info"]["Executor ID"]),
+        "date_start": _date_start,
+        "date_end": _date_end,
+        # Notice this duration is different from the green bar
+        # in the Spark UI. The green bar indicates the duration
+        # of the task being scheduled onto the executor,
+        # not the actual execution on the CPU
+        "duration_cpu_usage": float(task["Task Metrics"]["Executor CPU Time"]),
+        "duration_cpu_overhead_serde": (
+            float(
+                task["Task Metrics"][
+                    "Executor Deserialize CPU Time"]
+                # / 1e9
+            )
+            + (
+                float(
+                    task["Task Metrics"][
+                        "Result Serialization Time"]
+                )
+                * float(1e6)
+            )
+        ),
+        "duration_cpu_overhead_shuffle": (
+            # Read
+            float(
+                task["Task Metrics"]["Shuffle Read Metrics"][
+                    "Fetch Wait Time"]
+                # / 1e3
+            )
+            # Write
+            + float(
+                task["Task Metrics"]["Shuffle Write Metrics"][
+                    "Shuffle Write Time"]
+                # / 1e3
+            )
+        ),
+        "memory_spill_disk": float(
+            task["Task Metrics"]["Disk Bytes Spilled"]
+        ),
     }
-    
-    _dict_base["date"]["start"] = (
-        pd.to_datetime(
-            1e6 *
-            _dict_base["date"]["start"]
-        )
-    )
-    
-    _dict_base["date"]["end"] = (
-        pd.to_datetime(
-            1e6 *
-            _dict_base["date"]["end"]
-        )
-    )
     
     return _dict_base
