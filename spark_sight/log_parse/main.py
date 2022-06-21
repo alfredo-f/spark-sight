@@ -47,62 +47,6 @@ def _extract_task_info(
     return df
 
 
-def extract_task_info_2(
-    lines_tasks: List[dict],
-    stage_ids: Union[List[int], Set[int]],
-) -> pd.DataFrame:
-    """Extract task information from Spark log lines.
-
-    Parameters
-    ----------
-    lines_tasks : list of dict
-        Lines of the Spark log.
-    stage_ids : iterable of int
-        Stage ids to filter for.
-
-    Returns
-    -------
-    pd.DataFrame
-        Pandas DataFrame containing task information.
-        It contains the following columns:
-
-        * id_task: int
-        * id_stage: int
-        * date_start__task: start date of the task
-        * date_end__task: end date of the task
-        * duration_cpu_usage: duration of actual work. Measured in ns
-        * duration_cpu_overhead_serde: duration of overhead (de)serialization. Measured in ns
-        * duration_cpu_overhead_shuffle: duration of overhead shuffle (reading and writing). Measured in ns
-
-    """
-    _log_root = "Extracting task information from Spark event log"
-    
-    try:
-        pool_number_max = cpu_count()
-    except NotImplementedError:
-        pool_number_max = 8
-    
-    pool_number = min(
-        len(stage_ids),
-        pool_number_max,
-    )
-
-    with Pool(pool_number) as p:
-        return pd.concat(
-            (
-            
-            p.map(
-                partial(
-        _extract_task_info,
-                    lines_tasks=lines_tasks,
-                ) ,
-                stage_ids,
-            )
-            ),
-            ignore_index=True,
-        )
-    
-
 def extract_task_info(
     lines_tasks: List[dict],
 ) -> pd.DataFrame:
@@ -131,15 +75,19 @@ def extract_task_info(
     is_multiprocessing = True
     
     if is_multiprocessing:
+        try:
+            pool_number_max = cpu_count() - 1
+        except NotImplementedError:
+            pool_number_max = 7
+    
         pool_number = min(
             len(stage_ids),
-            8,
+            pool_number_max,
         )
     
         with Pool(pool_number) as p:
             return pd.concat(
                 (
-                
                     p.map(
                         partial(
                             _extract_task_info,
