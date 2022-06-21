@@ -452,91 +452,91 @@ if __name__ == '__main__':
     cpus = 60
     
     deploy_mode = DEPLOY_MODE_CLUSTER
+    
+    # (
+    #     fig_efficiency,
+    #     fig_stages,
+    #     fig_memory,
+    #     fig_spill,
+    # ) = create_charts_dash(
+    #     path_spark_event_log,
+    #     cpus,
+    #     deploy_mode,
+    # )
+    # pickle.dump(
+    #     fig_efficiency,
+    #     open(
+    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
+    #         "wb"
+    #     )
+    # )
+    # pickle.dump(
+    #     fig_stages,
+    #     open(
+    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
+    #         "wb"
+    #     )
+    # )
+    # pickle.dump(
+    #     fig_memory,
+    #     open(
+    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
+    #         "wb"
+    #     )
+    # )
+    # pickle.dump(
+    #     fig_spill,
+    #     open(
+    #         r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
+    #         "wb"
+    #     )
+    # )
 
     (
         fig_efficiency,
         fig_stages,
         fig_memory,
         fig_spill,
-    ) = create_charts_dash(
-        path_spark_event_log,
-        cpus,
-        deploy_mode,
+    ) = (
+        pickle.load(
+            open(
+                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
+                "rb",
+            )
+        ),
+        pickle.load(
+            open(
+                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
+                "rb",
+            )
+        ),
+        pickle.load(
+            open(
+                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
+                "rb",
+            )
+        ),
+        pickle.load(
+            open(
+                r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
+                "rb",
+            )
+        ),
     )
-    pickle.dump(
-        fig_efficiency,
-        open(
-            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
-            "wb"
-        )
-    )
-    pickle.dump(
-        fig_stages,
-        open(
-            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
-            "wb"
-        )
-    )
-    pickle.dump(
-        fig_memory,
-        open(
-            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
-            "wb"
-        )
-    )
-    pickle.dump(
-        fig_spill,
-        open(
-            r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
-            "wb"
-        )
-    )
-
-    # (
-    #     fig_efficiency,
-    #     fig_stages,
-    #     fig_memory,
-    #     fig_spill,
-    # ) = (
-    #     pickle.load(
-    #         open(
-    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_efficiency",
-    #             "rb",
-    #         )
-    #     ),
-    #     pickle.load(
-    #         open(
-    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_stages",
-    #             "rb",
-    #         )
-    #     ),
-    #     pickle.load(
-    #         open(
-    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_memory",
-    #             "rb",
-    #         )
-    #     ),
-    #     pickle.load(
-    #         open(
-    #             r"C:\Users\a.fomitchenko\PycharmProjects\spark-sight\spark_sight\create_charts\pickle_objs\fig_spill",
-    #             "rb",
-    #         )
-    #     ),
-    # )
     
     layout_charts_perc_efficiency = 30
     layout_charts_perc_spill = 25
-    layout_charts_perc_memory = 25
+    layout_charts_perc_memory = 50
     layout_charts_perc_timeline = 20
     
-    assert sum(
-        [
-            layout_charts_perc_efficiency,
-            layout_charts_perc_spill,
-            layout_charts_perc_memory,
-            layout_charts_perc_timeline,
-        ]
-    ) == 100
+    # assert sum(
+    #     [
+    #         layout_charts_perc_efficiency,
+    #         layout_charts_perc_spill,
+    #         layout_charts_perc_memory,
+    #         layout_charts_perc_timeline,
+    #     ]
+    # ) == 100
     
     layout_charts_perc = [
         layout_charts_perc_efficiency,
