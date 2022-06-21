@@ -12,16 +12,11 @@ from spark_sight.data_references import (
 
 
 def _extract_task_info(
-    stage_id: int,
     lines_tasks: List[dict],
 ):
     df = pd.DataFrame()
     
-    logging.debug(f"Stage {stage_id}")
-    
-    tasks = extract_events_tasks(lines_tasks, stage_id=stage_id)
-    
-    for task in tasks:
+    for task in lines_tasks:
         _task_info_dict = convert_line_to_metrics(task)
         
         _task_info_df = pd.json_normalize(
@@ -72,37 +67,6 @@ def extract_task_info(
         * duration_cpu_overhead_shuffle: duration of overhead shuffle (reading and writing). Measured in ns
 
     """
-    is_multiprocessing = True
-    
-    if is_multiprocessing:
-        try:
-            pool_number_max = cpu_count() - 1
-        except NotImplementedError:
-            pool_number_max = 7
-    
-        pool_number = min(
-            len(stage_ids),
-            pool_number_max,
-        )
-    
-        with Pool(pool_number) as p:
-            return pd.concat(
-                (
-                    p.map(
-                        partial(
-                            _extract_task_info,
-                            lines_tasks=lines_tasks,
-                        ),
-                        stage_ids,
-                    )
-                ),
-                ignore_index=True,
-            ).reset_index(drop=True)
-        
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    
     _log_root = "Extracting task information from Spark event log"
     _file_lines = len(lines_tasks)
     _perc_log_dict = [0.25, 0.5, 0.75]
