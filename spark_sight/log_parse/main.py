@@ -171,7 +171,8 @@ def convert_line_to_metrics(
             task["Task Info"]["Finish Time"]
         )
     )
-
+    
+    # TODO {"Event":"SparkListenerLogStart","Spark Version":"2.4.3"} < 3.0.0
     try:
         _memory_usage_execution = float(
             task['Task Executor Metrics']["OnHeapExecutionMemory"]
