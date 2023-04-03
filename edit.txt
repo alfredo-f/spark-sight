@@ -1,0 +1,149 @@
+Meet "spark-sight": Spark Performance at a Glance
+Quick and easy insights on your Spark application performance
+Photo by Jez Timms on UnsplashI love Spark, but I don't love the Spark UI.
+This is why, at first, I was excited to find out that Data Mechanics was developing Delight, sharing with the world
+an open-source agent collecting information from within the Spark application;
+a closed-source dashboard displaying the performance of a Spark application in terms of CPU efficiency and memory usage.
+
+Even though the service is free of charge,
+you need to integrate into your Spark application their custom listener that collects and sends out data to their servers;
+it may be difficult for your boss to approve such practice (privacy concerns), or outright unable to (e.g. your application runs in a Glue job inside a VPC without internet access).
+
+Willing to gather everything I know about Spark, I took on the challenge of recreating the same amazing experience of Delight for everybody to enjoy and contribute to.
+This is why I created the Python package spark-sight.
+spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance:
+CPU time spent doing the "actual work";
+CPU time spent doing shuffle reading and writing;
+CPU time spent doing serialization and deserialization;
+Spill intensity per executor
+
+spark-sight is not meant to replace the Spark UI altogether, rather it provides a bird's-eye view of the stages. This allows you to gain general information about the performance of your Spark application, and identify at a glance which portions of the execution may need improvement.
+User interface: the main Plotly figure
+The Plotly figure is the main component of the UI. It consists of three charts with synced x-axis.
+Let's dive into each chart.
+Top chart: efficiency in terms of CPU cores available for tasks
+The chart at the top is a stacked bar chart that breaks down, for each interval shown, how the Spark application has spent that period of time. 
+There are three categories shown:
+Actual task work: percentage of CPU time spent doing the "actual work", i.e. the work related to the tasks that executors were assigned to do. 
+I choose green for the color of this bar because it is the portion you wish to be as high as possible: the higher this portion, the higher the Spark application performance.
+Shuffle read and write: percentage of CPU time spent while shuffle reading or shuffle writing. 
+No distinction is made between the two operations, in fact they are ultimately considered to be time unrelated to "actual work": the higher this portion, the lower the Spark application performance.
+Serialization, deserialization: this is the percentage of CPU time spent while serializing and deserializing tasks. 
+As in the case above, no distinction is made between the two operations, highlighting a lower Spark performance.
+
+Middle chart: spill intensity per executor
+The chart in the middle is a timeline chart showing, for each executor, when and how much the executor has spilled to disk.
+The chart can be read as follows: 
+A constant value on the y-axis represents one of the executors, as shown by the legend on the left-hand side;
+Time is depicted on the x-axis, and synchronized with all other charts;
+Each portion is color-graded proportionally to the intensity of the spill. In the image above, you will notice that a more intense purple is assigned to higher values of spill.
+
+Caring about the spill of your Spark application is very important: when one of the partitions is too large to fit in the executor memory, the disk is accessed and performance decreases by orders of magnitude. 
+You can read more on spill here.
+Bottom chart: timeline of the Spark stages
+The chart at the bottom is a timeline chart showing the boundaries of the Spark stages.
+This chart is useful for quick debugging of which stages are to be analyzed and improved, logically grouping what is shown in more detail in the other charts.
+How to install the package
+To install spark-sight,
+$ pip install spark-sight
+$ spark-sight --help
+The help shows the parameters that the application receives:
+path :  the local path to the Spark event log you have collected from your Spark application;
+cpus : the total number of CPUs the cluster was composed of;
+deploy_mode : how the Spark application was deployed. Can be cluster mode or client mode, where cluster mode will subtract the CPU used by the Spark driver from the CPU count
+
+Here's an example of how to run spark-sight on your Spark event log:
+Unix
+
+$ spark-sight \
+    --path "/path/to/spark-application-12345" \
+    --cpus 32 \
+    --deploy_mode "cluster_mode"
+Windows PowerShell
+
+$ spark-sight `
+    --path "C:\path\to\spark-application-12345" `
+    --cpus 32 `
+    --deploy_mode "cluster_mode"
+A new browser tab will be opened, where you will find the Plotly chart described above.
+For more information, head over to the spark-sight Github repo.
+Ok, but how is the chart built?
+The Spark event log is a simple text file that Spark is natively able to store somewhere for you to open and look through:
+--conf spark.eventLog.enabled=true
+--conf spark.eventLog.dir=file:///c:/somewhere
+--conf spark.history.fs.logDirectory=file:///c:/somewhere
+As described in the Spark documentation, hidden somewhere in the text file are the performance data:
+SparkListenerTaskEnd events: for how long the task was shuffling, serializing, deserializing, and doing the "actual work" it was supposed to do in the first place
+SparkListenerStageCompleted events: for how long the corresponding stage was in the submitted state
+
+Given a stage, the efficiency of a stage is the ratio between
+Used CPU time: 
+total CPU time of "actual work"
+across all the tasks of the stage
+Available CPU time: 
+total CPU time (idle or busy) 
+across all cluster nodes during the stage submission
+
+Well, that was simple, right?
+No.
+Parallel stages
+Onto the cluster, multiple stages can be submitted at the same time. So you can't really compute the efficiency of a stage by itself, because in the meantime the cluster could be executing other stages.
+We need to change the definition of efficiency.
+Given a time interval, the efficiency of the time interval is the ratio between
+Used CPU time: 
+total CPU time of "actual work"
+a̶c̶r̶o̶s̶s̶ ̶a̶l̶l̶ ̶t̶h̶e̶ ̶t̶a̶s̶k̶s̶ ̶o̶f̶ ̶t̶h̶e̶ ̶s̶t̶a̶g̶e̶ 
+across all the tasks across all the stages submitted in that time interval
+Available CPU time: 
+total CPU time (idle or busy) 
+ ̶a̶c̶r̶o̶s̶s̶ ̶a̶l̶l̶ ̶c̶l̶u̶s̶t̶e̶r̶ ̶n̶o̶d̶e̶s̶ ̶d̶u̶r̶i̶n̶g̶ ̶t̶h̶e̶ ̶s̶t̶a̶g̶e̶ ̶s̶u̶b̶m̶i̶s̶s̶i̶o̶n̶
+across all cluster nodes in that time interval
+
+Well, which time interval? Splitting tasks
+You may think stage boundaries may be enough, but tasks can run across those boundaries. In the following diagram, notice task 1 running across the boundary:
+How do you split task metrics in two?
+For task 1, compound information regarding CPU usage is reported. As an example, the following situations are reported equivalently as
+the task ran for 10 seconds
+the task used the CPU for 4 seconds
+
+{
+  "Event":"SparkListenerTaskEnd",
+  "Stage ID":0,
+  "Task Info": {
+    "Task ID":0,
+    "Task Metrics": {
+      "Executor CPU Time": 4000000000 (nanoseconds)
+    }
+}
+The simplest solution for splitting the task is splitting CPU usage and the other metrics proportionally with respect to the resulting duration of the split (technically speaking, we assume a uniform distribution of probability across the interval).
+Notice that this approximation may create artifacts, e.g. going above 100%.
+The Plotly figure
+I used the Python library Plotly, so easy to enable you to streamline a simple visualization like this one, providing a lightweight and interactive interface.
+Notice that the visualization has an improvement over the time intervals discussed above. In fact, the top bar chart further splits the time intervals identifying when the first and last task of the stage has actually started.
+A real-world scenario: why is the client's pipeline slow?
+A client of Data Reply was expressing concerns regarding the performance of a Spark application running on AWS Glue. Glue can provide some metrics on the performance, but we wanted to go a little deeper, identify quickly where the problem was and iterate rapidly.
+With the following parameters, we were able to output the Spark event log to an S3 bucket of our choice.
+--conf spark.eventLog.enabled=true
+--conf spark.eventLog.dir=s3://bucket_prod/spark_event_logs/
+--conf spark.history.fs.logDirectory=s3://bucket_prod/spark_event_logs/
+Saving the file locally and running spark-sight on it, the following situation was depicted.
+Top chart: drops in CPU usage due to faulty repartitions
+We noticed that, in the chart at the top, a frequent drop of performance was happening in some stages. Notice, as an example,
+stage 150 achieving a healthy > 80% of efficiency
+stage 165 dropping to 1% of efficiency
+
+Thanks to further investigation of the Spark code, we found the faulty calls to df.repartition(1) that were causing the application to use a single CPU of the cluster.
+Middle chart first half: executors are too small
+We noticed, in the first half of the middle chart, that spilling was happening 
+for all executors
+in equal amounts
+
+This is a clear indication that the parameter spark.executor.memory is too low: in fact, all executors are equally struggling to keep in memory their partitions. Finetuning the parameter and iterating quickly solved the issue.
+Middle chart second half: skewed data
+We noticed, in the second half of the middle chart, that spilling was happening at a higher intensity for some executors. Notice, as an example, that during stage 180, executor 7 has spilled three times more than the other executors.
+This is a clear indication of skewed data: executors are assigned partitions of different sizes, so some of them will spill more and others less. 
+This intuition, built quickly and intuitively by spark-sight, was confirmed upon further investigation inside the Spark UI, where stage 180 shows the following:
+Conclusions
+spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance.
+As we've seen in this article, its simple UI conveys intuitively and effectively information that would take hours to reconstruct from the Spark UI alone.
+However, its simplicity can enable rapid iteration on bottleneck identification and finetuning, solving real-world scenarios and increasing efficiency with very little effort.
