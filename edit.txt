@@ -1,7 +1,9 @@
 Meet "spark-sight": Spark Performance at a Glance
 Quick and easy insights on your Spark application performance
-Photo by Jez Timms on UnsplashI love Spark, but I don't love the Spark UI.
-This is why, at first, I was excited to find out that Data Mechanics was developing Delight, sharing with the world
+Photo by Jez Timms on UnsplashApache Spark has become the go-to framework for big data processing. Its distributed computing architecture enables lightning-fast processing speed, fault tolerance, and the ability to handle massive amounts of data.
+However, monitoring the performance of a Spark application can be a challenging task, particularly when dealing with complex and intricate workflows. 
+I personally love the ecosystem that the open-source community has created around Apache Spark, but I find that the mainstream monitoring tools are quite cumbersome to use. This is especially true for the official Spark UI, which, in my opinion, provides too fine-grained details instead of big-picture summaries. 
+Have some solutions emerged in order to extend and complement the Spark UI experience? As an example, Data Mechanics has been developing Delight, sharing with the world
 an open-source agent collecting information from within the Spark application;
 a closed-source dashboard displaying the performance of a Spark application in terms of CPU efficiency and memory usage.
 
@@ -9,8 +11,9 @@ Even though the service is free of charge,
 you need to integrate into your Spark application their custom listener that collects and sends out data to their servers;
 it may be difficult for your boss to approve such practice (privacy concerns), or outright unable to (e.g. your application runs in a Glue job inside a VPC without internet access).
 
-Willing to gather everything I know about Spark, I took on the challenge of recreating the same amazing experience of Delight for everybody to enjoy and contribute to.
-This is why I created the Python package spark-sight.
+I was inspired by this effort, and I was willing to gather everything I know about Spark. So I took on the challenge of recreating the same amazing experience of Delight for everybody to enjoy and contribute to.
+This is why I created the Python package spark-sight. 
+Here's some highlights of the User Experience:
 spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance:
 CPU time spent doing the "actual work";
 CPU time spent doing shuffle reading and writing;
@@ -129,8 +132,8 @@ With the following parameters, we were able to output the Spark event log to an 
 Saving the file locally and running spark-sight on it, the following situation was depicted.
 Top chart: drops in CPU usage due to faulty repartitions
 We noticed that, in the chart at the top, a frequent drop of performance was happening in some stages. Notice, as an example,
-stage 150 achieving a healthy > 80% of efficiency
-stage 165 dropping to 1% of efficiency
+stage 150 achieves a healthy > 80% of efficiency
+stage 165 drops to 1% of efficiency
 
 Thanks to further investigation of the Spark code, we found the faulty calls to df.repartition(1) that were causing the application to use a single CPU of the cluster.
 Middle chart first half: executors are too small
@@ -144,6 +147,6 @@ We noticed, in the second half of the middle chart, that spilling was happening 
 This is a clear indication of skewed data: executors are assigned partitions of different sizes, so some of them will spill more and others less. 
 This intuition, built quickly and intuitively by spark-sight, was confirmed upon further investigation inside the Spark UI, where stage 180 shows the following:
 Conclusions
-spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance.
-As we've seen in this article, its simple UI conveys intuitively and effectively information that would take hours to reconstruct from the Spark UI alone.
-However, its simplicity can enable rapid iteration on bottleneck identification and finetuning, solving real-world scenarios and increasing efficiency with very little effort.
+In conclusion, we have highlighted how monitoring the performance of a Spark application can be a challenging task, particularly when dealing with complex and intricate workflows.
+However, the Python package spark-sight is a less detailed, more intuitive representation of what is going on inside your Spark application in terms of performance, and it conveys intuitively and effectively information that would take hours to reconstruct from other tools such as the Spark UI.
+The simplicity of spark-sight can enable rapid iteration on bottleneck identification and finetuning, solving real-world scenarios and increasing efficiency with very little effort.
